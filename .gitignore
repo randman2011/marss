@@ -62,3 +62,10 @@ gdb.txt
 
 # Any patch files
 *.patch
+
+# Eclipse files
+.cproject
+.project
+
+# Temp files
+*~
