@@ -48,13 +48,13 @@ bool OooCore::icache_wakeup(void *arg) {
 	foreach (i, threadcount)
 	{
 		ThreadContext* thread = threads[i];
-		if unlikely(
+		ifunlikely(
 				thread && thread->waiting_for_icache_fill
-						&& thread->waiting_for_icache_fill_physaddr
-								== floor(physaddr, ICACHE_FETCH_GRANULARITY))
+				&& thread->waiting_for_icache_fill_physaddr
+				== floor(physaddr, ICACHE_FETCH_GRANULARITY))
 		{
 			if (logable(6))
-				ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*) (Waddr) physaddr, endl;
+			ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*) (Waddr) physaddr, endl;
 			thread->waiting_for_icache_fill = 0;
 			thread->waiting_for_icache_fill_physaddr = 0;
 			if unlikely (thread->itlb_walk_level > 0) {
@@ -62,13 +62,13 @@ bool OooCore::icache_wakeup(void *arg) {
 				thread->itlbwalk();
 			}
 		}
-	else {
-		if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
-		" delivered ", (void*) physaddr,endl;
+		else {
+			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
+			" delivered ", (void*) physaddr,endl;
+		}
 	}
-}
 
-return true;
+	return true;
 }
 
 /**
@@ -81,87 +81,87 @@ return true;
 bool ThreadContext::probeitlb(Waddr icache_addr) {
 
 #ifdef DISABLE_TLB
-return true;
+	return true;
 #endif
 
-if (!itlb.probe(icache_addr, threadid)) {
+	if (!itlb.probe(icache_addr, threadid)) {
 
-	if (logable(6)) {
-		ptl_logfile << "itlb miss addr: ", (void*) icache_addr, endl;
+		if (logable(6)) {
+			ptl_logfile << "itlb miss addr: ", (void*) icache_addr, endl;
+		}
+
+		itlb_walk_level = ctx.page_table_level_count();
+		itlb_miss_init_cycle = sim_cycle;
+		thread_stats.dcache.itlb.misses++;
+
+		return false;
 	}
 
-	itlb_walk_level = ctx.page_table_level_count();
-	itlb_miss_init_cycle = sim_cycle;
-	thread_stats.dcache.itlb.misses++;
-
-	return false;
-}
-
-/* Its not an exception and its not tlb miss */
-thread_stats.dcache.itlb.hits++;
-return true;
+	/* Its not an exception and its not tlb miss */
+	thread_stats.dcache.itlb.hits++;
+	return true;
 }
 
 /**
  * @brief AVADH
  */
 void ThreadContext::itlbwalk() {
-if (logable(6)) {
-	ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ", itlb_walk_level, " virtaddr: ", (void*) (W64(
-			fetchrip)), endl;
-}
-
-if unlikely(!itlb_walk_level)
-{
-	itlb_walk_finish: if (logable(6)) {
-		ptl_logfile << "itlbwalk finished for virtaddr: ", (void*) (W64(
+	if (logable(6)) {
+		ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ", itlb_walk_level, " virtaddr: ", (void*) (W64(
 				fetchrip)), endl;
 	}
-	itlb_walk_level = 0;
-	itlb.insert(fetchrip, threadid);
-	int delay = min(sim_cycle - itlb_miss_init_cycle, (W64) 1000);
-	thread_stats.dcache.itlb_latency[delay]++;
-	waiting_for_icache_fill = 0;
-	return;
-}
 
-W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
+	ifunlikely(!itlb_walk_level)
+	{
+		itlb_walk_finish: if (logable(6)) {
+			ptl_logfile << "itlbwalk finished for virtaddr: ", (void*) (W64(
+							fetchrip)), endl;
+		}
+		itlb_walk_level = 0;
+		itlb.insert(fetchrip, threadid);
+		int delay = min(sim_cycle - itlb_miss_init_cycle, (W64) 1000);
+		thread_stats.dcache.itlb_latency[delay]++;
+		waiting_for_icache_fill = 0;
+		return;
+	}
 
-if (pteaddr == (W64) -1) {
-	goto itlb_walk_finish;
-	return;
-}
+	W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
 
-if (!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid,
-		true)) {
-	/* Cache queue is full.. so simply skip this iteration */
-	itlb_walk_level = 0;
-	return;
-}
+	if (pteaddr == (W64) -1) {
+		goto itlb_walk_finish;
+		return;
+	}
 
-Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(
-		core.get_coreid());
-assert(request != NULL);
+	if (!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid,
+			true)) {
+		/* Cache queue is full.. so simply skip this iteration */
+		itlb_walk_level = 0;
+		return;
+	}
 
-request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle, true, 0, 0,
-		Memory::MEMORY_OP_READ);
-request->set_coreSignal(&core.icache_signal);
+	Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(
+			core.get_coreid());
+	assert(request != NULL);
 
-waiting_for_icache_fill_physaddr = floor(pteaddr, ICACHE_FETCH_GRANULARITY);
-waiting_for_icache_fill = 1;
+	request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle, true, 0,
+			0, Memory::MEMORY_OP_READ);
+	request->set_coreSignal(&core.icache_signal);
 
-bool buf_hit = core.memoryHierarchy->access_cache(request);
+	waiting_for_icache_fill_physaddr = floor(pteaddr, ICACHE_FETCH_GRANULARITY);
+	waiting_for_icache_fill = 1;
 
-/*
- * We have a small buffer that returns true if the instruction access hits
- * into that buffer. (This is implemented due to original PTLsim design...)
- * So if we have a buffer hit, we simply reduce the itlb_walk_level and
- * call the itlbwalk recursively.  Hope that this doesn't happen a lot
- */
-if (buf_hit) {
-	itlb_walk_level--;
-	itlbwalk();
-}
+	bool buf_hit = core.memoryHierarchy->access_cache(request);
+
+	/*
+	 * We have a small buffer that returns true if the instruction access hits
+	 * into that buffer. (This is implemented due to original PTLsim design...)
+	 * So if we have a buffer hit, we simply reduce the itlb_walk_level and
+	 * call the itlbwalk recursively.  Hope that this doesn't happen a lot
+	 */
+	if (buf_hit) {
+		itlb_walk_level--;
+		itlbwalk();
+	}
 }
 
 /**
@@ -173,47 +173,48 @@ if (buf_hit) {
  * @return The physical register
  */
 static W32 phys_reg_files_writable_by_uop(const TransOp& uop) {
-W32 c = opinfo[uop.opcode].opclass;
+	W32 c = opinfo[uop.opcode].opclass;
 
 #ifdef UNIFIED_INT_FP_PHYS_REG_FILE
-return
-(c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
-(c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
-OooCore::PHYS_REG_FILE_MASK_INT;
+	return
+	(c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
+	(c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
+	OooCore::PHYS_REG_FILE_MASK_INT;
 #else
-return (c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
-		(c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
-		(c & (OPCLASS_LOAD | OPCLASS_PREFETCH)) ?
-				((uop.datatype == DATATYPE_INT) ?
-						OooCore::PHYS_REG_FILE_MASK_INT :
-						OooCore::PHYS_REG_FILE_MASK_FP) :
-		((c & OPCLASS_FP) | inrange((int) uop.rd, REG_xmml0, REG_xmmh15)
-				| inrange((int) uop.rd, REG_mmx0, REG_mmx7)
-				| inrange((int) uop.rd, REG_fptos, REG_ctx)) ?
-				OooCore::PHYS_REG_FILE_MASK_FP : OooCore::PHYS_REG_FILE_MASK_INT;
+	return (c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
+			(c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
+			(c & (OPCLASS_LOAD | OPCLASS_PREFETCH)) ?
+					((uop.datatype == DATATYPE_INT) ?
+							OooCore::PHYS_REG_FILE_MASK_INT :
+							OooCore::PHYS_REG_FILE_MASK_FP) :
+			((c & OPCLASS_FP) | inrange((int) uop.rd, REG_xmml0, REG_xmmh15)
+					| inrange((int) uop.rd, REG_mmx0, REG_mmx7)
+					| inrange((int) uop.rd, REG_fptos, REG_ctx)) ?
+					OooCore::PHYS_REG_FILE_MASK_FP :
+					OooCore::PHYS_REG_FILE_MASK_INT;
 #endif
 }
 
 void ThreadContext::annul_fetchq() {
 
-/*
- * There may be return address stack (RAS) updates from calls and returns
- * in the fetch queue that never made it to renaming, so they have no ROB
- * that the core can annul normally. Therefore, we must go backwards in
- * the fetch queue to annul these updates, in addition to checking the ROB.
- */
+	/*
+	 * There may be return address stack (RAS) updates from calls and returns
+	 * in the fetch queue that never made it to renaming, so they have no ROB
+	 * that the core can annul normally. Therefore, we must go backwards in
+	 * the fetch queue to annul these updates, in addition to checking the ROB.
+	 */
 
-foreach_backward (fetchq, i)
-{
-	FetchBufferEntry& fetchbuf = fetchq[i];
-	if unlikely(
-			isbranch(fetchbuf.opcode)
-					&& (fetchbuf.predinfo.bptype
-							& (BRANCH_HINT_CALL | BRANCH_HINT_RET)))
+	foreach_backward (fetchq, i)
 	{
-		branchpred.annulras(fetchbuf.predinfo);
+		FetchBufferEntry& fetchbuf = fetchq[i];
+		ifunlikely(
+				isbranch(fetchbuf.opcode)
+				&& (fetchbuf.predinfo.bptype
+						& (BRANCH_HINT_CALL | BRANCH_HINT_RET)))
+		{
+			branchpred.annulras(fetchbuf.predinfo);
+		}
 	}
-}
 }
 
 /**
@@ -221,17 +222,17 @@ foreach_backward (fetchq, i)
  * their initial state, and resume from the state saved in ctx.commitarf.
  */
 void OooCore::flush_pipeline() {
-/* Clear per-thread state: */
-if (logable(3))
-	ptl_logfile << "flush_pipeline all.", endl;
-foreach (i, threadcount)
-{
-	ThreadContext* thread = threads[i];
-	thread->flush_pipeline();
-}
-machine.memoryHierarchyPtr->flush(-1);
-/* Clear out everything global: */
-setzero(robs_on_fu);
+	/* Clear per-thread state: */
+	if (logable(3))
+		ptl_logfile << "flush_pipeline all.", endl;
+	foreach (i, threadcount)
+	{
+		ThreadContext* thread = threads[i];
+		thread->flush_pipeline();
+	}
+	machine.memoryHierarchyPtr->flush(-1);
+	/* Clear out everything global: */
+	setzero(robs_on_fu);
 }
 
 /**
@@ -239,82 +240,82 @@ setzero(robs_on_fu);
  * their initial state, and resume from the state saved in ctx.commitarf.
  */
 void ThreadContext::flush_pipeline() {
-if (logable(3))
-	ptl_logfile << " core[", core.get_coreid(), "] TH[", threadid, "] flush_pipeline()", endl;
+	if (logable(3))
+		ptl_logfile << " core[", core.get_coreid(), "] TH[", threadid, "] flush_pipeline()", endl;
 
-core.machine.memoryHierarchyPtr->flush(core.get_coreid());
+	core.machine.memoryHierarchyPtr->flush(core.get_coreid());
 
-annul_fetchq();
+	annul_fetchq();
 
-foreach_forward(ROB, i)
-{
-	ReorderBufferEntry& rob = ROB[i];
-	rob.release_mem_lock(true);
-	/*
-	 * Note that we might actually flush halfway through a locked RMW
-	 * instruction, but this is not as bad as in the annul case, as the
-	 * store (the W-part of the RMW) will be wiped too.
-	 */
-
-	flush_mem_lock_release_list();
-	rob.physreg->reset(threadid); /* free all register allocated by rob */
-}
-
-/* free all register in arch state: */
-foreach (i, PHYS_REG_FILE_COUNT)
-{
-	StateList& list = core.physregfiles[i].states[PHYSREG_ARCH];
-	PhysicalRegister* obj;
-	int n = 0;
-	foreach_list_mutable(list, obj, entry, nextentry)
+	foreach_forward(ROB, i)
 	{
-		n++;
-		obj->reset(threadid);
-	}
-}
+		ReorderBufferEntry& rob = ROB[i];
+		rob.release_mem_lock(true);
+		/*
+		 * Note that we might actually flush halfway through a locked RMW
+		 * instruction, but this is not as bad as in the annul case, as the
+		 * store (the W-part of the RMW) will be wiped too.
+		 */
 
-/* free all register in arch state: */
-foreach (i, PHYS_REG_FILE_COUNT)
-{
-	StateList& list = core.physregfiles[i].states[PHYSREG_PENDINGFREE];
-	PhysicalRegister* obj;
-	int n = 0;
-	foreach_list_mutable(list, obj, entry, nextentry)
+		flush_mem_lock_release_list();
+		rob.physreg->reset(threadid); /* free all register allocated by rob */
+	}
+
+	/* free all register in arch state: */
+	foreach (i, PHYS_REG_FILE_COUNT)
 	{
-		n++;
-		obj->reset(threadid);
+		StateList& list = core.physregfiles[i].states[PHYSREG_ARCH];
+		PhysicalRegister* obj;
+		int n = 0;
+		foreach_list_mutable(list, obj, entry, nextentry)
+		{
+			n++;
+			obj->reset(threadid);
+		}
 	}
-}
 
-reset_fetch_unit(ctx.eip);
-rob_states.reset();
+	/* free all register in arch state: */
+	foreach (i, PHYS_REG_FILE_COUNT)
+	{
+		StateList& list = core.physregfiles[i].states[PHYSREG_PENDINGFREE];
+		PhysicalRegister* obj;
+		int n = 0;
+		foreach_list_mutable(list, obj, entry, nextentry)
+		{
+			n++;
+			obj->reset(threadid);
+		}
+	}
 
-ROB.reset();
-foreach (i, ROB_SIZE)
-{
-	ROB[i].coreid = core.get_coreid();
-	ROB[i].core = &core;
-	ROB[i].threadid = threadid;
-	ROB[i].changestate(rob_free_list);
-}
-LSQ.reset();
-foreach (i, LSQ_SIZE)
-{
-	LSQ[i].coreid = core.get_coreid();
-	LSQ[i].core = &core;
-}
-loads_in_flight = 0;
-stores_in_flight = 0;
-foreach_issueq(reset(core.get_coreid(), threadid, &core));
+	reset_fetch_unit(ctx.eip);
+	rob_states.reset();
 
-dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
-last_commit_at_cycle = sim_cycle;
-external_to_core_state();
+	ROB.reset();
+	foreach (i, ROB_SIZE)
+	{
+		ROB[i].coreid = core.get_coreid();
+		ROB[i].core = &core;
+		ROB[i].threadid = threadid;
+		ROB[i].changestate(rob_free_list);
+	}
+	LSQ.reset();
+	foreach (i, LSQ_SIZE)
+	{
+		LSQ[i].coreid = core.get_coreid();
+		LSQ[i].core = &core;
+	}
+	loads_in_flight = 0;
+	stores_in_flight = 0;
+	foreach_issueq(reset(core.get_coreid(), threadid, &core));
 
-if (pause_counter)
-	thread_stats.cycles_in_pause -= pause_counter;
-pause_counter = 0;
-in_tlb_walk = 0;
+	dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
+	last_commit_at_cycle = sim_cycle;
+	external_to_core_state();
+
+	if (pause_counter)
+		thread_stats.cycles_in_pause -= pause_counter;
+	pause_counter = 0;
+	in_tlb_walk = 0;
 }
 
 /**
@@ -323,22 +324,22 @@ in_tlb_walk = 0;
  * @param realrip rip the fuction will reset the fetchig to
  */
 void ThreadContext::reset_fetch_unit(W64 realrip) {
-if (current_basic_block) {
-	/* Release our lock on the cached basic block we're currently fetching */
-	current_basic_block->release();
-	current_basic_block = NULL;
-}
+	if (current_basic_block) {
+		/* Release our lock on the cached basic block we're currently fetching */
+		current_basic_block->release();
+		current_basic_block = NULL;
+	}
 
-if (logable(10))
-	ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base, endl;
-fetchrip = realrip;
-fetchrip.update(ctx);
-stall_frontend = 0;
-waiting_for_icache_fill = 0;
-itlb_walk_level = 0;
-fetchq.reset();
-current_basic_block_transop_index = 0;
-unaligned_ldst_buf.reset();
+	if (logable(10))
+		ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base, endl;
+	fetchrip = realrip;
+	fetchrip.update(ctx);
+	stall_frontend = 0;
+	waiting_for_icache_fill = 0;
+	itlb_walk_level = 0;
+	fetchq.reset();
+	current_basic_block_transop_index = 0;
+	unaligned_ldst_buf.reset();
 }
 
 /**
@@ -347,81 +348,56 @@ unaligned_ldst_buf.reset();
  * are referenced, thus preventing them from being freed.
  */
 void ThreadContext::invalidate_smc() {
-if unlikely(smc_invalidate_pending)
-{
-	if (logable(5))
+	ifunlikely(smc_invalidate_pending)
+	{
+		if (logable(5))
 		ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
-	bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo,
-			INVALIDATE_REASON_SMC);
-	if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
-	smc_invalidate_pending = 0;
-}
+		bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo,
+				INVALIDATE_REASON_SMC);
+		if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
+		smc_invalidate_pending = 0;
+	}
 }
 
 /**
  * @brief Copy external archregs to physregs and reset all rename tables
  */
 void ThreadContext::external_to_core_state() {
-foreach (i, PHYS_REG_FILE_COUNT)
-{
-	PhysicalRegisterFile& rf = core.physregfiles[i];
-	PhysicalRegister* zeroreg = rf.alloc(threadid, PHYS_REG_NULL);
-	zeroreg->addspecref(0, threadid);
-	zeroreg->commit();
-	zeroreg->data = 0;
-	zeroreg->flags = 0;
-	zeroreg->archreg = REG_zero;
-}
+	foreach (i, PHYS_REG_FILE_COUNT)
+	{
+		PhysicalRegisterFile& rf = core.physregfiles[i];
+		PhysicalRegister* zeroreg = rf.alloc(threadid, PHYS_REG_NULL);
+		zeroreg->addspecref(0, threadid);
+		zeroreg->commit();
+		zeroreg->data = 0;
+		zeroreg->flags = 0;
+		zeroreg->archreg = REG_zero;
+	}
 
-/* Always start out on cluster 0: */
-PhysicalRegister* zeroreg = &core.physregfiles[0][PHYS_REG_NULL];
-
-/*
- *  Allocate and commit each architectural register
- */
-foreach (i, ARCHREG_COUNT)
-{
+	/* Always start out on cluster 0: */
+	PhysicalRegister* zeroreg = &core.physregfiles[0][PHYS_REG_NULL];
 
 	/*
-	 * IMPORTANT! If using some register file configuration other
-	 *  than (integer, fp), this needs to be changed!
+	 *  Allocate and commit each architectural register
 	 */
+	foreach (i, ARCHREG_COUNT)
+	{
+
+		/*
+		 * IMPORTANT! If using some register file configuration other
+		 *  than (integer, fp), this needs to be changed!
+		 */
 
 #ifdef UNIFIED_INT_FP_PHYS_REG_FILE
-	int rfid = (i == REG_rip) ? PHYS_REG_FILE_BR : PHYS_REG_FILE_INT;
+		int rfid = (i == REG_rip) ? PHYS_REG_FILE_BR : PHYS_REG_FILE_INT;
 #else
-	bool fp = inrange((int) i, REG_xmml0, REG_xmmh15)
-			| (inrange((int) i, REG_fptos, REG_ctx))
-			| (inrange((int) i, REG_mmx0, REG_mmx1));
-	int rfid = (fp) ? core.PHYS_REG_FILE_FP :
+		bool fp = inrange((int) i, REG_xmml0, REG_xmmh15)
+				| (inrange((int) i, REG_fptos, REG_ctx))
+				| (inrange((int) i, REG_mmx0, REG_mmx1));
+		int rfid =
+				(fp) ? core.PHYS_REG_FILE_FP :
 				(i == REG_rip) ? core.PHYS_REG_FILE_BR : core.PHYS_REG_FILE_INT;
 #endif
-	PhysicalRegisterFile& rf = core.physregfiles[rfid];
-	PhysicalRegister* physreg = (i == REG_zero) ? zeroreg : rf.alloc(threadid);
-	assert(physreg); /* need increase rf size if failed. */
-	physreg->archreg = i;
-	physreg->data = ctx.get(i);
-	physreg->flags = 0;
-	commitrrt[i] = physreg;
-
-	thread_stats.physreg_writes[physreg->rfid]++;
-
-	if (fp)
-		thread_stats.fp_reg_reads++;
-	else
-		thread_stats.reg_reads++;
-}
-
-commitrrt[REG_flags]->flags = (W16) commitrrt[REG_flags]->data;
-
-/*
- * Internal translation registers are never used before
- * they are written for the first time:
- */
-
-for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
-	if (i <= REG_fpstack) {
-		int rfid = core.PHYS_REG_FILE_FP;
 		PhysicalRegisterFile& rf = core.physregfiles[rfid];
 		PhysicalRegister* physreg =
 				(i == REG_zero) ? zeroreg : rf.alloc(threadid);
@@ -430,34 +406,61 @@ for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
 		physreg->data = ctx.get(i);
 		physreg->flags = 0;
 		commitrrt[i] = physreg;
-	} else {
-		commitrrt[i] = zeroreg;
+
+		thread_stats.physreg_writes[physreg->rfid]++;
+
+		if (fp)
+			thread_stats.fp_reg_reads++;
+		else
+			thread_stats.reg_reads++;
 	}
-}
 
-/*
- * Set renamable flags
- */
+	commitrrt[REG_flags]->flags = (W16) commitrrt[REG_flags]->data;
 
-commitrrt[REG_zf] = commitrrt[REG_flags];
-commitrrt[REG_cf] = commitrrt[REG_flags];
-commitrrt[REG_of] = commitrrt[REG_flags];
+	/*
+	 * Internal translation registers are never used before
+	 * they are written for the first time:
+	 */
 
-/*
- * Copy commitrrt to specrrt and update refcounts
- */
+	for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
+		if (i <= REG_fpstack) {
+			int rfid = core.PHYS_REG_FILE_FP;
+			PhysicalRegisterFile& rf = core.physregfiles[rfid];
+			PhysicalRegister* physreg =
+					(i == REG_zero) ? zeroreg : rf.alloc(threadid);
+			assert(physreg); /* need increase rf size if failed. */
+			physreg->archreg = i;
+			physreg->data = ctx.get(i);
+			physreg->flags = 0;
+			commitrrt[i] = physreg;
+		} else {
+			commitrrt[i] = zeroreg;
+		}
+	}
 
-foreach (i, TRANSREG_COUNT)
-{
-	commitrrt[i]->commit();
-	specrrt[i] = commitrrt[i];
-	specrrt[i]->addspecref(i, threadid);
-	commitrrt[i]->addcommitref(i, threadid);
-}
+	/*
+	 * Set renamable flags
+	 */
+
+	commitrrt[REG_zf] = commitrrt[REG_flags];
+	commitrrt[REG_cf] = commitrrt[REG_flags];
+	commitrrt[REG_of] = commitrrt[REG_flags];
+
+	/*
+	 * Copy commitrrt to specrrt and update refcounts
+	 */
+
+	foreach (i, TRANSREG_COUNT)
+	{
+		commitrrt[i]->commit();
+		specrrt[i] = commitrrt[i];
+		specrrt[i]->addspecref(i, threadid);
+		commitrrt[i]->addcommitref(i, threadid);
+	}
 
 #ifdef ENABLE_TRANSIENT_VALUE_TRACKING
-specrrt.renamed_in_this_basic_block.reset();
-commitrrt.renamed_in_this_basic_block.reset();
+	specrrt.renamed_in_this_basic_block.reset();
+	commitrrt.renamed_in_this_basic_block.reset();
 #endif
 }
 
@@ -466,64 +469,64 @@ commitrrt.renamed_in_this_basic_block.reset();
  * or are otherwise stalled.
  */
 void ThreadContext::redispatch_deadlock_recovery() {
-if (logable(6))
-	core.dump_state(ptl_logfile);
+	if (logable(6))
+		core.dump_state(ptl_logfile);
 
-thread_stats.dispatch.redispatch.deadlock_flushes++;
-/* don't want to reset the counter for no commit in this case */
-W64 previous_last_commit_at_cycle = last_commit_at_cycle;
-if (logable(3))
-	ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.", endl;
-flush_pipeline();
-last_commit_at_cycle = previous_last_commit_at_cycle; /* so we can exit after no commit after deadlock recovery a few times in a roll */
-ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
-/*
- //
- // This is a more selective scheme than the full pipeline flush.
- // Presently it does not work correctly with some combinations
- // of user-modifiable parameters, so it's disabled to ensure
- // deadlock-free operation in every configuration.
- //
+	thread_stats.dispatch.redispatch.deadlock_flushes++;
+	/* don't want to reset the counter for no commit in this case */
+	W64 previous_last_commit_at_cycle = last_commit_at_cycle;
+	if (logable(3))
+		ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.", endl;
+	flush_pipeline();
+	last_commit_at_cycle = previous_last_commit_at_cycle; /* so we can exit after no commit after deadlock recovery a few times in a roll */
+	ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
+	/*
+	 //
+	 // This is a more selective scheme than the full pipeline flush.
+	 // Presently it does not work correctly with some combinations
+	 // of user-modifiable parameters, so it's disabled to ensure
+	 // deadlock-free operation in every configuration.
+	 //
 
- ReorderBufferEntry* prevrob = NULL;
- bitvec<MAX_OPERANDS> noops = 0;
+	 ReorderBufferEntry* prevrob = NULL;
+	 bitvec<MAX_OPERANDS> noops = 0;
 
- foreach_forward(ROB, robidx) {
- ReorderBufferEntry& rob = ROB[robidx];
+	 foreach_forward(ROB, robidx) {
+	 ReorderBufferEntry& rob = ROB[robidx];
 
- //
- // Only re-dispatch those uops that have not yet generated a value
- // or are guaranteed to produce a value soon without tying up resources.
- // This must occur in program order to avoid deadlock!
- //
- // bool recovery_required = (rob.current_state_list->flags & ROB_STATE_IN_ISSUE_QUEUE) || (rob.current_state_list == &rob_ready_to_dispatch_list);
- bool recovery_required = 1; // for now, just to be safe
+	 //
+	 // Only re-dispatch those uops that have not yet generated a value
+	 // or are guaranteed to produce a value soon without tying up resources.
+	 // This must occur in program order to avoid deadlock!
+	 //
+	 // bool recovery_required = (rob.current_state_list->flags & ROB_STATE_IN_ISSUE_QUEUE) || (rob.current_state_list == &rob_ready_to_dispatch_list);
+	 bool recovery_required = 1; // for now, just to be safe
 
- if (recovery_required) {
- rob.redispatch(noops, prevrob);
- prevrob = &rob;
- per_context_ooocore_stats_update(threadid, dispatch.redispatch.deadlock_uops_flushed++);
- }
- }
+	 if (recovery_required) {
+	 rob.redispatch(noops, prevrob);
+	 prevrob = &rob;
+	 per_context_ooocore_stats_update(threadid, dispatch.redispatch.deadlock_uops_flushed++);
+	 }
+	 }
 
- if (logable(6)) dump_smt_state();
- */
+	 if (logable(6)) dump_smt_state();
+	 */
 }
 
 int OooCore::hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp) {
-W32 h = rvp.rip ^ rvp.mfnlo;
-return lowbits(h, log2(UNALIGNED_PREDICTOR_SIZE));
+	W32 h = rvp.rip ^ rvp.mfnlo;
+	return lowbits(h, log2(UNALIGNED_PREDICTOR_SIZE));
 }
 
 bool OooCore::get_unaligned_hint(const RIPVirtPhysBase& rvp) const {
-int slot = hash_unaligned_predictor_slot(rvp);
-return unaligned_predictor[slot];
+	int slot = hash_unaligned_predictor_slot(rvp);
+	return unaligned_predictor[slot];
 }
 
 void OooCore::set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value) {
-int slot = hash_unaligned_predictor_slot(rvp);
-assert(inrange(slot, 0, UNALIGNED_PREDICTOR_SIZE));
-unaligned_predictor[slot] = value;
+	int slot = hash_unaligned_predictor_slot(rvp);
+	assert(inrange(slot, 0, UNALIGNED_PREDICTOR_SIZE));
+	unaligned_predictor[slot] = value;
 }
 
 /**
@@ -532,285 +535,288 @@ unaligned_predictor[slot] = value;
  * @return True unless there is an exception in Code page
  */
 bool ThreadContext::fetch() {
-OooCore& core = getcore();
+	OooCore& core = getcore();
 
-int fetchcount = 0;
-int taken_branch_count = 0;
+	int fetchcount = 0;
+	int taken_branch_count = 0;
 
-if unlikely(stall_frontend)
-{
-	thread_stats.fetch.stop.stalled++;
-	return true;
-}
-
-if unlikely(waiting_for_icache_fill)
-{
-	thread_stats.fetch.stop.icache_miss++;
-	return true;
-}
-
-while ((fetchcount < FETCH_WIDTH) && (taken_branch_count == 0)) {
-	if unlikely(!fetchq.remaining())
+	if unlikely(stall_frontend)
 	{
-		thread_stats.fetch.stop.fetchq_full++;
-		break;
+		thread_stats.fetch.stop.stalled++;
+		return true;
 	}
+
+	if unlikely(waiting_for_icache_fill)
+	{
+		thread_stats.fetch.stop.icache_miss++;
+		return true;
+	}
+
+	while ((fetchcount < FETCH_WIDTH) && (taken_branch_count == 0)) {
+		if unlikely(!fetchq.remaining())
+		{
+			thread_stats.fetch.stop.fetchq_full++;
+			break;
+		}
 
 #ifndef MULTI_IQ
 
-	int reserved_iq_entries_per_thread = core.reserved_iq_entries
-			/ core.threadcount;
-	if ((issueq_count + fetchcount) >= reserved_iq_entries_per_thread) {
-		bool empty = false;
-		issueq_operation_on_cluster_with_result(core, cluster, empty,
-				shared_empty());
-		//
-		//++MTY FIXME starvation occurs when only one thread is in running state:
-		// we should re-balance reserved pool depending on number of running threads,
-		// not total number of threads!
-		//
-		if (empty) {
-			/* no shared entries left, stop fetching */
-			break;
+		int reserved_iq_entries_per_thread = core.reserved_iq_entries
+		/ core.threadcount;
+		if ((issueq_count + fetchcount) >= reserved_iq_entries_per_thread) {
+			bool empty = false;
+			issueq_operation_on_cluster_with_result(core, cluster, empty,
+					shared_empty());
+			//
+			//++MTY FIXME starvation occurs when only one thread is in running state:
+			// we should re-balance reserved pool depending on number of running threads,
+			// not total number of threads!
+			//
+			if (empty) {
+				/* no shared entries left, stop fetching */
+				break;
+			} else {
+				/* found a shared entry: continue fetching */
+			}
 		} else {
-			/* found a shared entry: continue fetching */
+			/* still have reserved entries left, continue fetching */
 		}
-	} else {
-		/* still have reserved entries left, continue fetching */
-	}
-	///    }
+		///    }
 #endif
 
-	if unlikely ((fetchrip.rip == config.start_log_at_rip) && (fetchrip.rip != 0xffffffffffffffffULL)) {
-		config.start_log_at_iteration = 0;
-		logenable = 1;
-	}
-
-	if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
-		if(logable(10))
-		ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
-
-		fetchrip.update(ctx);
-		if(fetch_or_translate_basic_block(fetchrip) == NULL) {
-			if(fetchrip.rip == ctx.eip) {
-				if(logable(10)) ptl_logfile << "Exception in Code page\n";
-				return false;
-			}
-			break;
-		}
-	}
-
-	if unlikely (current_basic_block->invalidblock) {
-		thread_stats.fetch.stop.bogus_rip++;
-		//
-		// Keep fetching - the decoder has injected assist microcode that
-		// branches to the invalid opcode or exec page fault handler.
-		//
-	}
-
-	// First probe tlb
-	if (!probeitlb(fetchrip)) {
-		// Its a itlb miss
-		itlbwalk();
-		break;
-	}
-
-	PageFaultErrorCode pfec;
-	int exception = 0;
-	int mmio = 0;
-	Waddr physaddr = ctx.check_and_translate(fetchrip, 3, false, false,
-			exception, mmio, pfec, true);
-
-	W64 req_icache_block = floor(physaddr, ICACHE_FETCH_GRANULARITY);
-	if ((!current_basic_block->invalidblock)
-			&& (req_icache_block != current_icache_block)) {
-
-		// test if icache is available:
-		bool cache_available = core.memoryHierarchy->is_cache_available(
-				core.get_coreid(), threadid, true/* icache */);
-		if (!cache_available) {
-			msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
-			thread_stats.fetch.stop.icache_stalled++;
-			break;
+		if unlikely ((fetchrip.rip == config.start_log_at_rip) && (fetchrip.rip != 0xffffffffffffffffULL)) {
+			config.start_log_at_iteration = 0;
+			logenable = 1;
 		}
 
-		bool hit;
-		assert(!waiting_for_icache_fill);
-
-		Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(
-				core.get_coreid());
-		assert(request != NULL);
-
-		request->init(core.get_coreid(), threadid, physaddr, 0, sim_cycle, true,
-				0, 0, Memory::MEMORY_OP_READ);
-		request->set_coreSignal(&core.icache_signal);
-
-		hit = core.memoryHierarchy->access_cache(request);
-
-		hit |= config.perfect_cache;
-		if unlikely (!hit) {
-			waiting_for_icache_fill = 1;
-			waiting_for_icache_fill_physaddr = req_icache_block;
-			thread_stats.fetch.stop.icache_miss++;
-			break;
-		}
-
-		thread_stats.fetch.blocks++;
-		current_icache_block = req_icache_block;
-	}
-
-	if (current_basic_block->invalidblock) {
-		thread_stats.fetch.stop.invalid_blocks++;
-	}
-
-	FetchBufferEntry& transop = *fetchq.alloc();
-
-	uopimpl_func_t synthop = NULL;
-
-	assert(current_basic_block->synthops);
-
-	if likely (!unaligned_ldst_buf.get(transop, synthop)) {
-		transop = current_basic_block->transops[current_basic_block_transop_index];
-		synthop = current_basic_block->synthops[current_basic_block_transop_index];
-	}
-
-	transop.unaligned = ((transop.opcode == OP_ld) | (transop.opcode == OP_ldx)
-			| (transop.opcode == OP_st)) && (transop.cond);
-	transop.ld_st_truly_unaligned = 0;
-	transop.rip = fetchrip;
-	transop.uuid = fetch_uuid;
-	transop.threadid = threadid;
-
-	//
-	// Handle loads and stores marked as unaligned in the unaligned
-	// predictor predecode information. These uops are split into two
-	// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
-	// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
-	// from this buffer instead of the basic block until both uops
-	// are forced into the pipeline.
-	//
-	if unlikely (transop.unaligned) {
-		split_unaligned(transop, unaligned_ldst_buf);
-		assert(unaligned_ldst_buf.get(transop, synthop));
-	}
-
-	assert(transop.bbindex == current_basic_block_transop_index);
-	transop.synthop = synthop;
-
-	current_basic_block_transop_index += (unaligned_ldst_buf.empty());
-
-	thread_stats.fetch.user_insns += transop.som;
-	if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
-		// We've hit an assist: stall the frontend until we resume or redirect
-		thread_stats.fetch.stop.microcode_assist++;
-		stall_frontend = 1;
-	}
-
-	thread_stats.fetch.uops++;
-	Waddr predrip = 0;
-	bool redirectrip = false;
-
-	transop.rip = fetchrip;
-	transop.uuid = fetch_uuid++;
-
-	if (isbranch(transop.opcode)) {
-		transop.predinfo.uuid = transop.uuid;
-		transop.predinfo.bptype = (isclass(transop.opcode, OPCLASS_COND_BRANCH)
-				<< log2(BRANCH_HINT_COND))
-				| (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)
-						<< log2(BRANCH_HINT_INDIRECT))
-				| (bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS))
-						<< log2(BRANCH_HINT_CALL))
-				| (bit(transop.extshift, log2(BRANCH_HINT_POP_RAS))
-						<< log2(BRANCH_HINT_RET));
-
-		// SMP/SMT: Fill in with target thread ID (if the predictor supports this):
-		transop.predinfo.ctxid = 0;
-		transop.predinfo.ripafter = fetchrip + transop.bytes;
-		predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype,
-				transop.predinfo.ripafter, transop.riptaken);
-
-		if (transop.predinfo.bptype
-				& (BRANCH_HINT_INDIRECT | BRANCH_HINT_RET) != 0) {
-			/* instruction is not unconditional - not br or jump */
-			if (predrip == transop.riptaken) {
-				/* branch was predicted taken */
-
-				/* FIXME : fetch transop.predinfo.ripafter */
-			} else {
-				/* branch was predicted taken */
-
-				/* FIXME : fetch transop.riptaken */
-			}
-
-		}
-
-		/*
-		 * FIXME : Branchpredictor should never give the predicted address in
-		 * different address space then fetchrip.  If its different, discard the
-		 * predicted address.
-		 */
-		if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
+		if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
 			if(logable(10))
-			ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
-			predrip = transop.riptaken;
-			redirectrip = 0;
-		} else {
-			redirectrip = 1;
-		}
+			ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
-		thread_stats.branchpred.predictions++;
-	}
-
-	// Set up branches so mispredicts can be calculated correctly:
-	if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
-		if unlikely (predrip != transop.riptaken) {
-			assert(predrip == transop.ripseq);
-			transop.cond = invert_cond(transop.cond);
-			//
-			// We need to be careful here: we already looked up the synthop for this
-			// uop according to the old condition, so redo that here so we call the
-			// correct code for the swapped condition.
-			//
-			transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
-			swap(transop.riptaken, transop.ripseq);
-		}
-	}
-	else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
-		transop.riptaken = predrip;
-		transop.ripseq = predrip;
-	}
-
-	thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
-
-	if likely (transop.eom) {
-		fetchrip.rip += transop.bytes;
-		fetchrip.update(ctx);
-
-		if unlikely (isbranch(transop.opcode) && (transop.predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET)))
-		branchpred.updateras(transop.predinfo, transop.predinfo.ripafter);
-
-		if unlikely (redirectrip && predrip) {
-			// follow to target, then end fetching for this cycle if predicted taken
-			bool taken = (predrip != fetchrip);
-			taken_branch_count += taken;
-			fetchrip = predrip;
 			fetchrip.update(ctx);
-			if (taken) {
-				fetchcount++;
-				thread_stats.fetch.stop.branch_taken++;
+			if(fetch_or_translate_basic_block(fetchrip) == NULL) {
+				if(fetchrip.rip == ctx.eip) {
+					if(logable(10)) ptl_logfile << "Exception in Code page\n";
+					return false;
+				}
 				break;
 			}
 		}
+
+		if unlikely (current_basic_block->invalidblock) {
+			thread_stats.fetch.stop.bogus_rip++;
+			//
+			// Keep fetching - the decoder has injected assist microcode that
+			// branches to the invalid opcode or exec page fault handler.
+			//
+		}
+
+		// First probe tlb
+		if (!probeitlb(fetchrip)) {
+			// Its a itlb miss
+			itlbwalk();
+			break;
+		}
+
+		PageFaultErrorCode pfec;
+		int exception = 0;
+		int mmio = 0;
+		Waddr physaddr = ctx.check_and_translate(fetchrip, 3, false, false,
+				exception, mmio, pfec, true);
+
+		W64 req_icache_block = floor(physaddr, ICACHE_FETCH_GRANULARITY);
+		if ((!current_basic_block->invalidblock)
+				&& (req_icache_block != current_icache_block)) {
+
+			// test if icache is available:
+			bool cache_available = core.memoryHierarchy->is_cache_available(
+					core.get_coreid(), threadid, true/* icache */);
+			if (!cache_available) {
+				msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
+				thread_stats.fetch.stop.icache_stalled++;
+				break;
+			}
+
+			bool hit;
+			assert(!waiting_for_icache_fill);
+
+			Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(
+					core.get_coreid());
+			assert(request != NULL);
+
+			request->init(core.get_coreid(), threadid, physaddr, 0, sim_cycle, true,
+					0, 0, Memory::MEMORY_OP_READ);
+			request->set_coreSignal(&core.icache_signal);
+
+			hit = core.memoryHierarchy->access_cache(request);
+
+			hit |= config.perfect_cache;
+			if unlikely (!hit) {
+				waiting_for_icache_fill = 1;
+				waiting_for_icache_fill_physaddr = req_icache_block;
+				thread_stats.fetch.stop.icache_miss++;
+				break;
+			}
+
+			thread_stats.fetch.blocks++;
+			current_icache_block = req_icache_block;
+		}
+
+		if (current_basic_block->invalidblock) {
+			thread_stats.fetch.stop.invalid_blocks++;
+		}
+
+		FetchBufferEntry& transop = *fetchq.alloc();
+
+		uopimpl_func_t synthop = NULL;
+
+		assert(current_basic_block->synthops);
+
+		if likely (!unaligned_ldst_buf.get(transop, synthop)) {
+			transop = current_basic_block->transops[current_basic_block_transop_index];
+			synthop = current_basic_block->synthops[current_basic_block_transop_index];
+		}
+
+		transop.unaligned = ((transop.opcode == OP_ld) | (transop.opcode == OP_ldx)
+				| (transop.opcode == OP_st)) && (transop.cond);
+		transop.ld_st_truly_unaligned = 0;
+		transop.rip = fetchrip;
+		transop.uuid = fetch_uuid;
+		transop.threadid = threadid;
+
+		//
+		// Handle loads and stores marked as unaligned in the unaligned
+		// predictor predecode information. These uops are split into two
+		// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
+		// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
+		// from this buffer instead of the basic block until both uops
+		// are forced into the pipeline.
+		//
+		if unlikely (transop.unaligned) {
+			split_unaligned(transop, unaligned_ldst_buf);
+			assert(unaligned_ldst_buf.get(transop, synthop));
+		}
+
+		assert(transop.bbindex == current_basic_block_transop_index);
+		transop.synthop = synthop;
+
+		current_basic_block_transop_index += (unaligned_ldst_buf.empty());
+
+		thread_stats.fetch.user_insns += transop.som;
+		if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
+			// We've hit an assist: stall the frontend until we resume or redirect
+			thread_stats.fetch.stop.microcode_assist++;
+			stall_frontend = 1;
+		}
+
+		thread_stats.fetch.uops++;
+		Waddr predrip = 0;
+		bool redirectrip = false;
+
+		transop.rip = fetchrip;
+		transop.uuid = fetch_uuid++;
+
+		if (isbranch(transop.opcode)) {
+			transop.predinfo.uuid = transop.uuid;
+			transop.predinfo.bptype = (isclass(transop.opcode, OPCLASS_COND_BRANCH)
+					<< log2(BRANCH_HINT_COND))
+			| (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)
+					<< log2(BRANCH_HINT_INDIRECT))
+			| (bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS))
+					<< log2(BRANCH_HINT_CALL))
+			| (bit(transop.extshift, log2(BRANCH_HINT_POP_RAS))
+					<< log2(BRANCH_HINT_RET));
+
+			// SMP/SMT: Fill in with target thread ID (if the predictor supports this):
+			transop.predinfo.ctxid = 0;
+			transop.predinfo.ripafter = fetchrip + transop.bytes;
+			predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype,
+					transop.predinfo.ripafter, transop.riptaken);
+
+			if (transop.predinfo.bptype
+					& (BRANCH_HINT_INDIRECT | BRANCH_HINT_RET) != 0) { // or (isClass(transop.opcode, OPCLASS_COND_BRANCH))
+				/* instruction is not unconditional - not br or jump */
+				if (predrip == transop.riptaken) {
+					/* branch was predicted taken */
+
+					/* FIXME : fetch transop.predinfo.ripafter */
+				} else {
+					/* branch was predicted not taken */
+
+					/* FIXME : fetch transop.riptaken */
+				}
+
+			}
+
+			/*
+			 * FIXME : Branchpredictor should never give the predicted address in
+			 * different address space then fetchrip.  If its different, discard the
+			 * predicted address.
+			 */
+			if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
+				if(logable(10))
+				ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
+				predrip = transop.riptaken;
+				redirectrip = 0;
+			} else {
+				redirectrip = 1;
+			}
+
+			thread_stats.branchpred.predictions++;
+		}
+
+		// Set up branches so mispredicts can be calculated correctly:
+		if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) { // if instruction is a conditional branch
+			if unlikely (predrip != transop.riptaken) {	// if instruction was predicted not taken
+				assert(predrip == transop.ripseq);
+
+				/* FIXME : could also fetch fetch transop.riptaken here... */
+
+				transop.cond = invert_cond(transop.cond);// invert condition - will predict taken
+				//
+				// We need to be careful here: we already looked up the synthop for this
+				// uop according to the old condition, so redo that here so we call the
+				// correct code for the swapped condition.
+				//
+				transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
+				swap(transop.riptaken, transop.ripseq);
+			}
+		}
+		else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
+			transop.riptaken = predrip;
+			transop.ripseq = predrip;
+		}
+
+		thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
+
+		if likely (transop.eom) {
+			fetchrip.rip += transop.bytes;
+			fetchrip.update(ctx);
+
+			if unlikely (isbranch(transop.opcode) && (transop.predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET)))
+			branchpred.updateras(transop.predinfo, transop.predinfo.ripafter);
+
+			if unlikely (redirectrip && predrip) {
+				// follow to target, then end fetching for this cycle if predicted taken
+				bool taken = (predrip != fetchrip);
+				taken_branch_count += taken;
+				fetchrip = predrip;
+				fetchrip.update(ctx);
+				if (taken) {
+					fetchcount++;
+					thread_stats.fetch.stop.branch_taken++;
+					break;
+				}
+			}
+		}
+
+		fetchcount++;
 	}
 
-	fetchcount++;
-}
-
-if (fetchcount == FETCH_WIDTH)
-	thread_stats.fetch.stop.full_width++;
-thread_stats.fetch.width[fetchcount]++;
-return true;
+	if (fetchcount == FETCH_WIDTH)
+		thread_stats.fetch.stop.full_width++;
+	thread_stats.fetch.width[fetchcount]++;
+	return true;
 }
 
 /**
@@ -821,40 +827,40 @@ return true;
  * @return Pointer to the basic block
  */
 BasicBlock* ThreadContext::fetch_or_translate_basic_block(
-	const RIPVirtPhys& rvp) {
+		const RIPVirtPhys& rvp) {
 
-if likely (current_basic_block) {
-	/* Release our ref to the old basic block being fetched */
-	current_basic_block->release();
-	current_basic_block = NULL;
-}
+	iflikely (current_basic_block) {
+		/* Release our ref to the old basic block being fetched */
+		current_basic_block->release();
+		current_basic_block = NULL;
+	}
 
-BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
+	BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
 
-if likely (bb) {
-	current_basic_block = bb;
-} else {
-	current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
-	if (current_basic_block == NULL) return NULL;
-	assert(current_basic_block);
-}
+	if likely (bb) {
+		current_basic_block = bb;
+	} else {
+		current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
+		if (current_basic_block == NULL) return NULL;
+		assert(current_basic_block);
+	}
 
-/*
- * Acquire a reference to the new basic block being fetched.
- * This must be done right away so future allocations do not
- * reclaim the BB while we still have a reference to it.
- */
+	/*
+	 * Acquire a reference to the new basic block being fetched.
+	 * This must be done right away so future allocations do not
+	 * reclaim the BB while we still have a reference to it.
+	 */
 
-current_basic_block->acquire();
-current_basic_block->use(sim_cycle);
+	current_basic_block->acquire();
+	current_basic_block->use(sim_cycle);
 
-if unlikely (!current_basic_block->synthops) synth_uops_for_bb(*current_basic_block);
-assert(current_basic_block->synthops);
+	if unlikely (!current_basic_block->synthops) synth_uops_for_bb(*current_basic_block);
+	assert(current_basic_block->synthops);
 
-current_basic_block_transop_index = 0;
-assert(current_basic_block->rip == rvp);
+	current_basic_block_transop_index = 0;
+	assert(current_basic_block->rip == rvp);
 
-return current_basic_block;
+	return current_basic_block;
 }
 
 /**
@@ -865,7 +871,7 @@ void ThreadContext::rename() {
 	int prepcount = 0;
 
 	while (prepcount < FRONTEND_WIDTH) {
-		if unlikely (fetchq.empty()) {
+		ifunlikely (fetchq.empty()) {
 			thread_stats.frontend.status.fetchq_empty++;
 			break;
 		}
@@ -1086,7 +1092,7 @@ void ThreadContext::frontend() {
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_frontend_list, rob, entry, nextentry)
 	{
-		if unlikely (rob->cycles_left <= 0) {
+		ifunlikely (rob->cycles_left <= 0) {
 			rob->cycles_left = -1;
 			rob->changestate(rob_ready_to_dispatch_list);
 		}
@@ -1254,7 +1260,7 @@ bool ReorderBufferEntry::find_sources() {
 	 * Add dependency on memory fence (if any) to help avoid unneeded replays
 	 */
 
-	if unlikely (isload(uop.opcode) | isstore(uop.opcode)) {
+	ifunlikely (isload(uop.opcode) | isstore(uop.opcode)) {
 		LoadStoreQueueEntry* fence = find_nearest_memory_fence();
 		if unlikely (fence) {
 			operands[RS] = fence->rob->physreg;
@@ -1268,7 +1274,7 @@ bool ReorderBufferEntry::find_sources() {
 		PhysicalRegister& source_physreg = *operands[operand];
 		ReorderBufferEntry& source_rob = *source_physreg.rob;
 
-		if likely (source_physreg.state == PHYSREG_WAITING) {
+		iflikely (source_physreg.state == PHYSREG_WAITING) {
 			uopids[operand] = source_rob.get_tag();
 			preready[operand] = 0;
 			operands_still_needed++;
@@ -1278,7 +1284,7 @@ bool ReorderBufferEntry::find_sources() {
 			preready[operand] = 1;
 		}
 
-		if likely (source_physreg.nonnull()) {
+		iflikely (source_physreg.nonnull()) {
 			per_physregfile_stats_update(dispatch.source,
 					source_physreg.rfid, [source_physreg.state]++);
 		}
@@ -1291,7 +1297,7 @@ bool ReorderBufferEntry::find_sources() {
 	 * store (this time around with the rc dependency required)
 	 */
 
-	if unlikely (isstore(uop.opcode) && !load_store_second_phase) {
+	ifunlikely (isstore(uop.opcode) && !load_store_second_phase) {
 		preready[RC] = 1;
 	}
 
@@ -1356,7 +1362,7 @@ int ReorderBufferEntry::select_cluster() {
 
 	executable_on_cluster &= cluster_issue_queue_avail_mask;
 
-	if unlikely (!executable_on_cluster) {
+	ifunlikely (!executable_on_cluster) {
 		return -1;
 	}
 
@@ -1387,7 +1393,7 @@ int ThreadContext::dispatch() {
 
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_dispatch_list, rob, entry, nextentry) {
-		if unlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
+		ifunlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
 
 		/* All operands start out as valid, then get put on wait queues if they are not actually ready. */
 
@@ -1463,7 +1469,7 @@ int ThreadContext::dispatch() {
 
 	CORE_STATS(dispatch.width)[core.dispatchcount]++;
 
-	if likely (core.dispatchcount) {
+	iflikely (core.dispatchcount) {
 		dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES + pause_counter;
 	} else if unlikely (!rob_ready_to_dispatch_list.empty()) {
 		dispatch_deadlock_countdown--;
@@ -1503,7 +1509,7 @@ int ThreadContext::complete(int cluster) {
 	foreach_list_mutable(rob_issued_list[cluster], rob, entry, nextentry) {
 		rob->cycles_left--;
 
-		if unlikely (rob->cycles_left <= 0) {
+		ifunlikely (rob->cycles_left <= 0) {
 			rob->changestate(rob_completed_list[cluster]);
 			rob->physreg->complete();
 			rob->forward_cycle = 0;
@@ -1529,7 +1535,7 @@ int ThreadContext::transfer(int cluster) {
 	foreach_list_mutable(rob_completed_list[cluster], rob, entry, nextentry) {
 		rob->forward();
 		rob->forward_cycle++;
-		if unlikely (rob->forward_cycle > MAX_FORWARDING_LATENCY) {
+		ifunlikely (rob->forward_cycle > MAX_FORWARDING_LATENCY) {
 			rob->forward_cycle = MAX_FORWARDING_LATENCY;
 			rob->changestate(rob_ready_to_writeback_list[rob->cluster]);
 		}
@@ -1553,7 +1559,7 @@ int ThreadContext::writeback(int cluster) {
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_writeback_list[cluster], rob, entry,
 			nextentry) {
-		if unlikely (core.writecount >= WRITEBACK_WIDTH) break;
+		ifunlikely (core.writecount >= WRITEBACK_WIDTH) break;
 
 		/*
 		 * Gather statistics
@@ -1682,9 +1688,9 @@ int ThreadContext::commit() {
 	{
 		ReorderBufferEntry& rob = ROB[i];
 
-		if unlikely (core.commitcount >= COMMIT_WIDTH) break;
+		ifunlikely (core.commitcount >= COMMIT_WIDTH) break;
 		rc = rob.commit();
-		if likely (rc == COMMIT_RESULT_OK) {
+		iflikely (rc == COMMIT_RESULT_OK) {
 			core.commitcount++;
 			last_commit_at_cycle = sim_cycle;
 			thread_stats.rob_reads++;
@@ -1806,7 +1812,7 @@ int ReorderBufferEntry::commit() {
 	 *
 	 */
 
-	if unlikely ((uop.opcode == OP_mf) && ready_to_commit() && (!load_store_second_phase)) {
+	ifunlikely ((uop.opcode == OP_mf) && ready_to_commit() && (!load_store_second_phase)) {
 		fencewakeup();
 		thread.flush_mem_lock_release_list();
 	}
@@ -1839,18 +1845,18 @@ int ReorderBufferEntry::commit() {
 
 		found_eom |= subrob.uop.eom;
 
-		if unlikely (!subrob.ready_to_commit()) {
+		ifunlikely (!subrob.ready_to_commit()) {
 			all_ready_to_commit = false;
 			cant_commit_subrob = &subrob;
 		}
 
-		if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
+		ifunlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
 			subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
 			subrob.physreg->flags = FLAG_INV;
 			if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
 		}
 
-		if unlikely (subrob.ready_to_commit() &&
+		ifunlikely (subrob.ready_to_commit() &&
 				(subrob.physreg->flags & FLAG_INV) &&
 				(subrob.uop.opcode != OP_ast)) {
 
@@ -1878,7 +1884,7 @@ int ReorderBufferEntry::commit() {
 			break;
 		}
 
-		if likely (subrob.uop.eom) break;
+		iflikely (subrob.uop.eom) break;
 	}
 
 	/*
@@ -1889,7 +1895,7 @@ int ReorderBufferEntry::commit() {
 
 	all_ready_to_commit &= found_eom;
 
-	if unlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
+	ifunlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
 		thread.thread_stats.commit.result.none++;
 
 		if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
@@ -1954,7 +1960,7 @@ int ReorderBufferEntry::commit() {
 	}
 
 	thread.thread_stats.commit.opclass[opclassof(uop.opcode)]++;
-	if unlikely (macro_op_has_exceptions) {
+	ifunlikely (macro_op_has_exceptions) {
 
 		/* See notes in handle_exception(): */
 		if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
@@ -1981,7 +1987,7 @@ int ReorderBufferEntry::commit() {
 	 *  becomes visible after the store has committed.
 	 *
 	 */
-	if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
+	ifunlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
 
 		/*
 		 * Invalidate the pages only after the pipeline is flushed: we may still
@@ -2020,7 +2026,7 @@ int ReorderBufferEntry::commit() {
 	 *
 	 */
 
-	if unlikely (uop.opcode == OP_st) {
+	ifunlikely (uop.opcode == OP_st) {
 		W64 lockaddr = lsq->physaddr << 3;
 		bool lock = core.memoryHierarchy->probe_lock(lockaddr,
 				thread.ctx.cpu_index);
@@ -2125,9 +2131,9 @@ int ReorderBufferEntry::commit() {
 	}
 	assert(ctx.get_cs_eip() == uop.rip);
 
-	if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
+	iflikely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
 
-	if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
+	ifunlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
 		setup_checker(ctx.cpu_index);
 		reset_checker_stores();
 	}
@@ -2140,7 +2146,7 @@ int ReorderBufferEntry::commit() {
 	 * The commit of all uops in the x86 macro-op is guaranteed to happen after this point
 	 */
 
-	if likely (archdest_can_commit[uop.rd]) {
+	iflikely (archdest_can_commit[uop.rd]) {
 		thread.commitrrt[uop.rd]->uncommitref(uop.rd, thread.threadid);
 		thread.commitrrt[uop.rd] = physreg;
 		thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
@@ -2159,7 +2165,7 @@ int ReorderBufferEntry::commit() {
 		physreg->rob = NULL;
 	}
 
-	if likely (uop.eom) {
+	iflikely (uop.eom) {
 		if unlikely (uop.rd == REG_rip) {
 			assert(isbranch(uop.opcode));
 
@@ -2186,7 +2192,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	if likely ((!ld) & (!st) & (!uop.nouserflags)) {
+	iflikely ((!ld) & (!st) & (!uop.nouserflags)) {
 		W64 flagmask = setflags_to_x86_flags[uop.setflags];
 
 		/* If Assist opcode, it might have updated the Interrupt flag */
@@ -2214,7 +2220,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
+	ifunlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
 		bool mmio = (lsq != NULL) ? lsq->mmio : false;
 		if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
 				uop.rip.rip != ctx.eip && !mmio) {
@@ -2225,13 +2231,13 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	if unlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
+	ifunlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
 		cout << "\nStarting the checker\n";
 		config.checker_enabled = true;
 		enable_checker();
 	}
 
-	if unlikely (uop.opcode == OP_st) {
+	ifunlikely (uop.opcode == OP_st) {
 		thread.ctx.smc_setdirty(lsq->physaddr << 3);
 
 		if(uop.internal) {
@@ -2279,7 +2285,7 @@ int ReorderBufferEntry::commit() {
 	 * Free physical registers, load/store queue entries, etc.
 	 */
 
-	if unlikely (ld|st) {
+	ifunlikely (ld|st) {
 		assert(lsq->data == physreg->data);
 		thread.loads_in_flight -= (lsq->store == 0);
 		thread.stores_in_flight -= (lsq->store == 1);
@@ -2291,7 +2297,7 @@ int ReorderBufferEntry::commit() {
 	assert(archdest_can_commit[uop.rd]);
 	assert(oldphysreg->state == PHYSREG_ARCH);
 
-	if likely (oldphysreg->nonnull()) {
+	iflikely (oldphysreg->nonnull()) {
 		if unlikely (oldphysreg->referenced()) {
 			oldphysreg->changestate(PHYSREG_PENDINGFREE);
 			CORE_STATS(commit.freereg.pending)++;
@@ -2301,7 +2307,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	if likely (!(br|st)) {
+	iflikely (!(br|st)) {
 		int k = clipto((int)consumer_count, 0,
 				thread.thread_stats.frontend.consumer_count.length() -1);
 		thread.thread_stats.frontend.consumer_count[k]++;
@@ -2324,7 +2330,7 @@ int ReorderBufferEntry::commit() {
 	 * Update branch prediction
 	 */
 
-	if unlikely (isclass(uop.opcode, OPCLASS_BRANCH)) {
+	ifunlikely (isclass(uop.opcode, OPCLASS_BRANCH)) {
 		assert(uop.eom);
 
 		/*
@@ -2340,7 +2346,7 @@ int ReorderBufferEntry::commit() {
 		thread.thread_stats.branchpred.updates++;
 	}
 
-	if likely (uop.eom) {
+	iflikely (uop.eom) {
 		total_insns_committed++;
 		thread.thread_stats.commit.insns++;
 		thread.total_insns_committed++;
@@ -2369,17 +2375,17 @@ int ReorderBufferEntry::commit() {
 	reset();
 	thread.ROB.commit(*this);
 
-	if unlikely (uop_is_barrier) {
+	ifunlikely (uop_is_barrier) {
 		thread.thread_stats.commit.result.barrier_t++;
 		return COMMIT_RESULT_BARRIER;
 	}
 
-	if unlikely (uop_is_eom & thread.stop_at_next_eom) {
+	ifunlikely (uop_is_eom & thread.stop_at_next_eom) {
 		ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
 		return COMMIT_RESULT_STOP;
 	}
 
-	if unlikely (uop_is_eom & thread.handle_interrupt_at_next_eom) {
+	ifunlikely (uop_is_eom & thread.handle_interrupt_at_next_eom) {
 		thread.handle_interrupt_at_next_eom = 0;
 		return COMMIT_RESULT_INTERRUPT;
 	}
