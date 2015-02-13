@@ -48,7 +48,7 @@ bool OooCore::icache_wakeup(void *arg) {
 	foreach (i, threadcount)
 	{
 		ThreadContext* thread = threads[i];
-		ifunlikely(
+		if unlikely(
 				thread && thread->waiting_for_icache_fill
 				&& thread->waiting_for_icache_fill_physaddr
 				== floor(physaddr, ICACHE_FETCH_GRANULARITY))
@@ -111,7 +111,7 @@ void ThreadContext::itlbwalk() {
 				fetchrip)), endl;
 	}
 
-	ifunlikely(!itlb_walk_level)
+	if unlikely(!itlb_walk_level)
 	{
 		itlb_walk_finish: if (logable(6)) {
 			ptl_logfile << "itlbwalk finished for virtaddr: ", (void*) (W64(
@@ -207,7 +207,7 @@ void ThreadContext::annul_fetchq() {
 	foreach_backward (fetchq, i)
 	{
 		FetchBufferEntry& fetchbuf = fetchq[i];
-		ifunlikely(
+		if unlikely(
 				isbranch(fetchbuf.opcode)
 				&& (fetchbuf.predinfo.bptype
 						& (BRANCH_HINT_CALL | BRANCH_HINT_RET)))
@@ -348,7 +348,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
  * are referenced, thus preventing them from being freed.
  */
 void ThreadContext::invalidate_smc() {
-	ifunlikely(smc_invalidate_pending)
+	if unlikely(smc_invalidate_pending)
 	{
 		if (logable(5))
 		ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
@@ -829,7 +829,7 @@ bool ThreadContext::fetch() {
 BasicBlock* ThreadContext::fetch_or_translate_basic_block(
 		const RIPVirtPhys& rvp) {
 
-	iflikely (current_basic_block) {
+	if likely (current_basic_block) {
 		/* Release our ref to the old basic block being fetched */
 		current_basic_block->release();
 		current_basic_block = NULL;
@@ -871,7 +871,7 @@ void ThreadContext::rename() {
 	int prepcount = 0;
 
 	while (prepcount < FRONTEND_WIDTH) {
-		ifunlikely (fetchq.empty()) {
+		if unlikely (fetchq.empty()) {
 			thread_stats.frontend.status.fetchq_empty++;
 			break;
 		}
@@ -1092,7 +1092,7 @@ void ThreadContext::frontend() {
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_frontend_list, rob, entry, nextentry)
 	{
-		ifunlikely (rob->cycles_left <= 0) {
+		if unlikely (rob->cycles_left <= 0) {
 			rob->cycles_left = -1;
 			rob->changestate(rob_ready_to_dispatch_list);
 		}
@@ -1260,7 +1260,7 @@ bool ReorderBufferEntry::find_sources() {
 	 * Add dependency on memory fence (if any) to help avoid unneeded replays
 	 */
 
-	ifunlikely (isload(uop.opcode) | isstore(uop.opcode)) {
+	if unlikely (isload(uop.opcode) | isstore(uop.opcode)) {
 		LoadStoreQueueEntry* fence = find_nearest_memory_fence();
 		if unlikely (fence) {
 			operands[RS] = fence->rob->physreg;
@@ -1274,7 +1274,7 @@ bool ReorderBufferEntry::find_sources() {
 		PhysicalRegister& source_physreg = *operands[operand];
 		ReorderBufferEntry& source_rob = *source_physreg.rob;
 
-		iflikely (source_physreg.state == PHYSREG_WAITING) {
+		if likely (source_physreg.state == PHYSREG_WAITING) {
 			uopids[operand] = source_rob.get_tag();
 			preready[operand] = 0;
 			operands_still_needed++;
@@ -1284,7 +1284,7 @@ bool ReorderBufferEntry::find_sources() {
 			preready[operand] = 1;
 		}
 
-		iflikely (source_physreg.nonnull()) {
+		if likely (source_physreg.nonnull()) {
 			per_physregfile_stats_update(dispatch.source,
 					source_physreg.rfid, [source_physreg.state]++);
 		}
@@ -1297,7 +1297,7 @@ bool ReorderBufferEntry::find_sources() {
 	 * store (this time around with the rc dependency required)
 	 */
 
-	ifunlikely (isstore(uop.opcode) && !load_store_second_phase) {
+	if unlikely (isstore(uop.opcode) && !load_store_second_phase) {
 		preready[RC] = 1;
 	}
 
@@ -1362,7 +1362,7 @@ int ReorderBufferEntry::select_cluster() {
 
 	executable_on_cluster &= cluster_issue_queue_avail_mask;
 
-	ifunlikely (!executable_on_cluster) {
+	if unlikely (!executable_on_cluster) {
 		return -1;
 	}
 
@@ -1393,7 +1393,7 @@ int ThreadContext::dispatch() {
 
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_dispatch_list, rob, entry, nextentry) {
-		ifunlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
+		if unlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
 
 		/* All operands start out as valid, then get put on wait queues if they are not actually ready. */
 
@@ -1469,7 +1469,7 @@ int ThreadContext::dispatch() {
 
 	CORE_STATS(dispatch.width)[core.dispatchcount]++;
 
-	iflikely (core.dispatchcount) {
+	if likely (core.dispatchcount) {
 		dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES + pause_counter;
 	} else if unlikely (!rob_ready_to_dispatch_list.empty()) {
 		dispatch_deadlock_countdown--;
@@ -1509,7 +1509,7 @@ int ThreadContext::complete(int cluster) {
 	foreach_list_mutable(rob_issued_list[cluster], rob, entry, nextentry) {
 		rob->cycles_left--;
 
-		ifunlikely (rob->cycles_left <= 0) {
+		if unlikely (rob->cycles_left <= 0) {
 			rob->changestate(rob_completed_list[cluster]);
 			rob->physreg->complete();
 			rob->forward_cycle = 0;
@@ -1535,7 +1535,7 @@ int ThreadContext::transfer(int cluster) {
 	foreach_list_mutable(rob_completed_list[cluster], rob, entry, nextentry) {
 		rob->forward();
 		rob->forward_cycle++;
-		ifunlikely (rob->forward_cycle > MAX_FORWARDING_LATENCY) {
+		if unlikely (rob->forward_cycle > MAX_FORWARDING_LATENCY) {
 			rob->forward_cycle = MAX_FORWARDING_LATENCY;
 			rob->changestate(rob_ready_to_writeback_list[rob->cluster]);
 		}
@@ -1559,7 +1559,7 @@ int ThreadContext::writeback(int cluster) {
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_writeback_list[cluster], rob, entry,
 			nextentry) {
-		ifunlikely (core.writecount >= WRITEBACK_WIDTH) break;
+		if unlikely (core.writecount >= WRITEBACK_WIDTH) break;
 
 		/*
 		 * Gather statistics
@@ -1688,9 +1688,9 @@ int ThreadContext::commit() {
 	{
 		ReorderBufferEntry& rob = ROB[i];
 
-		ifunlikely (core.commitcount >= COMMIT_WIDTH) break;
+		if unlikely (core.commitcount >= COMMIT_WIDTH) break;
 		rc = rob.commit();
-		iflikely (rc == COMMIT_RESULT_OK) {
+		if likely (rc == COMMIT_RESULT_OK) {
 			core.commitcount++;
 			last_commit_at_cycle = sim_cycle;
 			thread_stats.rob_reads++;
@@ -1812,7 +1812,7 @@ int ReorderBufferEntry::commit() {
 	 *
 	 */
 
-	ifunlikely ((uop.opcode == OP_mf) && ready_to_commit() && (!load_store_second_phase)) {
+	if unlikely ((uop.opcode == OP_mf) && ready_to_commit() && (!load_store_second_phase)) {
 		fencewakeup();
 		thread.flush_mem_lock_release_list();
 	}
@@ -1845,18 +1845,18 @@ int ReorderBufferEntry::commit() {
 
 		found_eom |= subrob.uop.eom;
 
-		ifunlikely (!subrob.ready_to_commit()) {
+		if unlikely (!subrob.ready_to_commit()) {
 			all_ready_to_commit = false;
 			cant_commit_subrob = &subrob;
 		}
 
-		ifunlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
+		if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
 			subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
 			subrob.physreg->flags = FLAG_INV;
 			if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
 		}
 
-		ifunlikely (subrob.ready_to_commit() &&
+		if unlikely (subrob.ready_to_commit() &&
 				(subrob.physreg->flags & FLAG_INV) &&
 				(subrob.uop.opcode != OP_ast)) {
 
@@ -1884,7 +1884,7 @@ int ReorderBufferEntry::commit() {
 			break;
 		}
 
-		iflikely (subrob.uop.eom) break;
+		if likely (subrob.uop.eom) break;
 	}
 
 	/*
@@ -1895,7 +1895,7 @@ int ReorderBufferEntry::commit() {
 
 	all_ready_to_commit &= found_eom;
 
-	ifunlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
+	if unlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
 		thread.thread_stats.commit.result.none++;
 
 		if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
@@ -1960,7 +1960,7 @@ int ReorderBufferEntry::commit() {
 	}
 
 	thread.thread_stats.commit.opclass[opclassof(uop.opcode)]++;
-	ifunlikely (macro_op_has_exceptions) {
+	if unlikely (macro_op_has_exceptions) {
 
 		/* See notes in handle_exception(): */
 		if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
@@ -1987,7 +1987,7 @@ int ReorderBufferEntry::commit() {
 	 *  becomes visible after the store has committed.
 	 *
 	 */
-	ifunlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
+	if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
 
 		/*
 		 * Invalidate the pages only after the pipeline is flushed: we may still
@@ -2026,7 +2026,7 @@ int ReorderBufferEntry::commit() {
 	 *
 	 */
 
-	ifunlikely (uop.opcode == OP_st) {
+	if unlikely (uop.opcode == OP_st) {
 		W64 lockaddr = lsq->physaddr << 3;
 		bool lock = core.memoryHierarchy->probe_lock(lockaddr,
 				thread.ctx.cpu_index);
@@ -2131,9 +2131,9 @@ int ReorderBufferEntry::commit() {
 	}
 	assert(ctx.get_cs_eip() == uop.rip);
 
-	iflikely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
+	if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
 
-	ifunlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
+	if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
 		setup_checker(ctx.cpu_index);
 		reset_checker_stores();
 	}
@@ -2146,7 +2146,7 @@ int ReorderBufferEntry::commit() {
 	 * The commit of all uops in the x86 macro-op is guaranteed to happen after this point
 	 */
 
-	iflikely (archdest_can_commit[uop.rd]) {
+	if likely (archdest_can_commit[uop.rd]) {
 		thread.commitrrt[uop.rd]->uncommitref(uop.rd, thread.threadid);
 		thread.commitrrt[uop.rd] = physreg;
 		thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
@@ -2165,7 +2165,7 @@ int ReorderBufferEntry::commit() {
 		physreg->rob = NULL;
 	}
 
-	iflikely (uop.eom) {
+	if likely (uop.eom) {
 		if unlikely (uop.rd == REG_rip) {
 			assert(isbranch(uop.opcode));
 
@@ -2192,7 +2192,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	iflikely ((!ld) & (!st) & (!uop.nouserflags)) {
+	if likely ((!ld) & (!st) & (!uop.nouserflags)) {
 		W64 flagmask = setflags_to_x86_flags[uop.setflags];
 
 		/* If Assist opcode, it might have updated the Interrupt flag */
@@ -2220,7 +2220,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	ifunlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
+	if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
 		bool mmio = (lsq != NULL) ? lsq->mmio : false;
 		if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
 				uop.rip.rip != ctx.eip && !mmio) {
@@ -2231,13 +2231,13 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	ifunlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
+	if unlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
 		cout << "\nStarting the checker\n";
 		config.checker_enabled = true;
 		enable_checker();
 	}
 
-	ifunlikely (uop.opcode == OP_st) {
+	if unlikely (uop.opcode == OP_st) {
 		thread.ctx.smc_setdirty(lsq->physaddr << 3);
 
 		if(uop.internal) {
@@ -2285,7 +2285,7 @@ int ReorderBufferEntry::commit() {
 	 * Free physical registers, load/store queue entries, etc.
 	 */
 
-	ifunlikely (ld|st) {
+	if unlikely (ld|st) {
 		assert(lsq->data == physreg->data);
 		thread.loads_in_flight -= (lsq->store == 0);
 		thread.stores_in_flight -= (lsq->store == 1);
@@ -2297,7 +2297,7 @@ int ReorderBufferEntry::commit() {
 	assert(archdest_can_commit[uop.rd]);
 	assert(oldphysreg->state == PHYSREG_ARCH);
 
-	iflikely (oldphysreg->nonnull()) {
+	if likely (oldphysreg->nonnull()) {
 		if unlikely (oldphysreg->referenced()) {
 			oldphysreg->changestate(PHYSREG_PENDINGFREE);
 			CORE_STATS(commit.freereg.pending)++;
@@ -2307,7 +2307,7 @@ int ReorderBufferEntry::commit() {
 		}
 	}
 
-	iflikely (!(br|st)) {
+	if likely (!(br|st)) {
 		int k = clipto((int)consumer_count, 0,
 				thread.thread_stats.frontend.consumer_count.length() -1);
 		thread.thread_stats.frontend.consumer_count[k]++;
@@ -2330,7 +2330,7 @@ int ReorderBufferEntry::commit() {
 	 * Update branch prediction
 	 */
 
-	ifunlikely (isclass(uop.opcode, OPCLASS_BRANCH)) {
+	if unlikely (isclass(uop.opcode, OPCLASS_BRANCH)) {
 		assert(uop.eom);
 
 		/*
@@ -2346,7 +2346,7 @@ int ReorderBufferEntry::commit() {
 		thread.thread_stats.branchpred.updates++;
 	}
 
-	iflikely (uop.eom) {
+	if likely (uop.eom) {
 		total_insns_committed++;
 		thread.thread_stats.commit.insns++;
 		thread.total_insns_committed++;
@@ -2375,17 +2375,17 @@ int ReorderBufferEntry::commit() {
 	reset();
 	thread.ROB.commit(*this);
 
-	ifunlikely (uop_is_barrier) {
+	if unlikely (uop_is_barrier) {
 		thread.thread_stats.commit.result.barrier_t++;
 		return COMMIT_RESULT_BARRIER;
 	}
 
-	ifunlikely (uop_is_eom & thread.stop_at_next_eom) {
+	if unlikely (uop_is_eom & thread.stop_at_next_eom) {
 		ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
 		return COMMIT_RESULT_STOP;
 	}
 
-	ifunlikely (uop_is_eom & thread.handle_interrupt_at_next_eom) {
+	if unlikely (uop_is_eom & thread.handle_interrupt_at_next_eom) {
 		thread.handle_interrupt_at_next_eom = 0;
 		return COMMIT_RESULT_INTERRUPT;
 	}

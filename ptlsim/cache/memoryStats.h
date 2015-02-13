@@ -152,11 +152,13 @@ struct BaseCacheStats : public Statable
 struct CPUControllerStats : public BaseCacheStats
 {
     StatArray<W64, 200> icache_latency;
+    StatArray<W64, 200> ibuf_latency;
     StatArray<W64, 200> dcache_latency;
 
     CPUControllerStats(const char *name, Statable *parent)
         : BaseCacheStats(name, parent)
           , icache_latency("icache_latency", this)
+          , ibuf_latency("ibuf_latency", this)
           , dcache_latency("dcache_latency", this)
     { }
 };

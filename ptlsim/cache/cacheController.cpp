@@ -102,6 +102,8 @@ CacheController::CacheController(W8 coreid, const char *name,
         type_ = L3_CACHE;
     else if (( strstr(get_name(), "L1_I") !=NULL) )
         type_ = L1_I_CACHE;
+	else if (( strstr(get_name(), "IBUF") !=NULL) )
+		type_ = INST_BUF;
     else if (( strstr(get_name(), "L1_D") !=NULL) )
         type_ = L1_D_CACHE;
 }

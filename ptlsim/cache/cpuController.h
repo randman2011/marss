@@ -118,6 +118,8 @@ class CPUController : public Controller
 			CPU_CONT_PENDING_REQ_SIZE> pendingRequests_;
 		FixStateList<CPUControllerBufferEntry, \
 			CPU_CONT_ICACHE_BUF_SIZE> icacheBuffer_;
+		FixStateList<CPUControllerBufferEntry, \
+			CPU_CONT_ICACHE_BUF_SIZE> ibufBuffer_;
 
 		bool is_icache_buffer_hit(MemoryRequest *request) ;
 

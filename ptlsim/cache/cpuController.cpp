@@ -48,8 +48,10 @@ CPUController::CPUController(W8 coreid, const char *name,
     memoryHierarchy_->add_cpu_controller(this);
 
 	int_L1_i_ = NULL;
+//	int_ibuf_ = NULL;
 	int_L1_d_ = NULL;
 	icacheLineBits_ = 0;
+//	ibufLineBits_ = 0;
 	dcacheLineBits_ = 0;
 
     SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
@@ -151,6 +153,28 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 	return false;
 }
 
+bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
+{
+	W64 lineAddress;
+	assert(request->is_instruction());
+	lineAddress = request->get_physical_address() >> ibufLineBits_;
+
+	memdebug("IBuf Line Address is : ", lineAddress, endl);
+
+	CPUControllerBufferEntry* entry;
+	foreach_list_mutable(ibufBuffer_.list(), entry, entry_t,
+			prev_t) {
+		if(entry->lineAddress == lineAddress) {
+			N_STAT_UPDATE(stats.cpurequest.count.hit.read.hit, ++, request->is_kernel());
+            N_STAT_UPDATE(stats.ibuf_latency, [1]++, request->is_kernel());
+			return true;
+		}
+	}
+
+	N_STAT_UPDATE(stats.cpurequest.count.miss.read, ++, request->is_kernel());
+	return false;
+}
+
 int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
 {
@@ -160,13 +184,21 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	if likely (interconnect == NULL) {
 		// From CPU
 		if unlikely (request->is_instruction()) {
+			if likely (!wrong_path) {
+				bool bufferHit = is_icache_buffer_hit(request);
+				if(bufferHit)
+					return 0;
 
-			bool bufferHit = is_icache_buffer_hit(request);
-			if(bufferHit)
-				return 0;
+				fastPathLat = int_L1_i_->access_fast_path(this, request);
+				N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
+			} else {
+				bool bufferHit = is_ibuf_buffer_hit(request);
+				if(bufferHit)
+					return 0;
 
-			fastPathLat = int_L1_i_->access_fast_path(this, request);
-            N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
+				fastPathLat = int_ibuf_->access_fast_path(this, request);
+				N_STAT_UPDATE(stats.ibuf_latency, [fastPathLat]++, kernel_req);
+			}
 		} else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
             N_STAT_UPDATE(stats.dcache_latency, [fastPathLat]++, kernel_req);
@@ -302,14 +334,25 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 
 	if unlikely (request->is_instruction()) {
 		W64 lineAddress = get_line_address(request);
-		if likely (icacheBuffer_.isFull()) {
-			memdebug("Freeing icache buffer head\n");
-			icacheBuffer_.free(icacheBuffer_.head());
-			N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
+		if likely (!wrong_path) {
+			if likely (icacheBuffer_.isFull()) {
+				memdebug("Freeing icache buffer head\n");
+				icacheBuffer_.free(icacheBuffer_.head());
+				N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
+			}
+			CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
+			bufEntry->lineAddress = lineAddress;
+			N_STAT_UPDATE(stats.icache_latency, [req_latency]++, kernel_req);
+		} else {
+			if likely (ibufBuffer_.isFull()) {
+				memdebug("Freeing ibuf buffer head\n");
+				ibufBuffer_.free(ibufBuffer_.head());
+				N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
+			}
+			CPUControllerBufferEntry *bufEntry = ibufBuffer_.alloc();
+			bufEntry->lineAddress = lineAddress;
+			N_STAT_UPDATE(stats.ibuf_latency, [req_latency]++, kernel_req);
 		}
-		CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
-		bufEntry->lineAddress = lineAddress;
-        N_STAT_UPDATE(stats.icache_latency, [req_latency]++, kernel_req);
 	} else {
         N_STAT_UPDATE(stats.dcache_latency, [req_latency]++, kernel_req);
 	}
@@ -342,7 +385,12 @@ bool CPUController::cache_access_cb(void *arg)
     /* Send request to corresponding interconnect */
 	Interconnect *interconnect;
 	if unlikely (queueEntry->request->is_instruction())
-		interconnect = int_L1_i_;
+	{
+//		if likely (!wrong_path)
+			interconnect = int_L1_i_;
+//		else
+//			interconnect = int_ibuf_;
+	}
 	else
 		interconnect = int_L1_d_;
 
@@ -448,6 +496,9 @@ void CPUController::register_interconnect(Interconnect *interconnect,
         case INTERCONN_TYPE_I:
             int_L1_i_ = interconnect;
             break;
+/*		case INTERCONN_TYPE_IBUF:
+			int_ibuf_ = interconnect;
+			break;*/
         case INTERCONN_TYPE_D:
             int_L1_d_ = interconnect;
             break;
@@ -460,6 +511,11 @@ void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
 {
 	int_L1_i_ = interconnect;
 }
+
+/*void CPUController::register_interconnect_ibuf_i(Interconnect *interconnect)
+{
+	int_ibuf_i_ = interconnect;
+}*/
 
 void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {

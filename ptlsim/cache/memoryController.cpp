@@ -89,6 +89,8 @@ void MemoryController::register_interconnect(Interconnect *interconnect,
         case INTERCONN_TYPE_UPPER:
             cacheInterconnect_ = interconnect;
             break;
+/*		case INTERCONN_TYPE_IBUF:
+			bufferInterconnect_ = interconnect;*/
         default:
             assert(0);
     }

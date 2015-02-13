@@ -35,6 +35,7 @@ namespace Memory{
 
 	enum CacheType {
 		L1_I_CACHE,
+		INST_BUF,
 		L1_D_CACHE,
 		L2_CACHE,
 		L3_CACHE,
