@@ -762,8 +762,16 @@ bool ThreadContext::fetch() {
 				thread_stats.branchpred.predictions++;
 			}
 
-			// Set up branches so mispredicts can be calculated correctly:
 			if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
+				// Fetch unpredicted path and place it in instruction buffer
+				Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
+				assert(request != NULL);
+				request->init(core.get_coreid(), threadid, (predrip == transop.riptaken) ? transop.ripseq : transop.riptaken, 0, sim_cycle,
+						true, 0, 0, Memory::MEMORY_OP_READ);
+				request->set_coreSignal(&core.ibuffer_signal);
+				bool hit = core.memoryHierarchy->access_cache(request);
+
+				// Set up branches so mispredicts can be calculated correctly:
 				if unlikely (predrip != transop.riptaken) {
 					assert(predrip == transop.ripseq);
 					transop.cond = invert_cond(transop.cond);

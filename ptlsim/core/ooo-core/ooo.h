@@ -1275,9 +1275,11 @@ namespace OOO_CORE_MODEL {
         Signal dcache_signal;
         Signal icache_signal;
 		Signal run_cycle;
+		Signal ibuffer_signal;
 
         bool dcache_wakeup(void *arg);
         bool icache_wakeup(void *arg);
+        bool ibuffer_wakeup(void *arg);
 
 		/* Debugging */
         void dump_state(ostream& os);
