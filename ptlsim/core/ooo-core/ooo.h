@@ -482,6 +482,7 @@ namespace OOO_CORE_MODEL {
         W16 index;
         W8 threadid;
         byte ld_st_truly_unaligned;
+        bool already_predicted = false;
 
         int init(int index) { this->index = index; return 0; }
         void validate() { }

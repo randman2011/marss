@@ -639,88 +639,139 @@ bool ThreadContext::fetch() {
         transop.uuid = fetch_uuid;
         transop.threadid = threadid;
 
-        //
-        // Handle loads and stores marked as unaligned in the unaligned
-        // predictor predecode information. These uops are split into two
-        // parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
-        // a 4-entry buffer (unaligned_ldst_pair). Fetching continues
-        // from this buffer instead of the basic block until both uops
-        // are forced into the pipeline.
-        //
-        if unlikely (transop.unaligned) {
-            split_unaligned(transop, unaligned_ldst_buf);
-            assert(unaligned_ldst_buf.get(transop, synthop));
-        }
-
-        assert(transop.bbindex == current_basic_block_transop_index);
-        transop.synthop = synthop;
-
-        current_basic_block_transop_index += (unaligned_ldst_buf.empty());
-
-        thread_stats.fetch.user_insns+=transop.som;
-        if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
-            // We've hit an assist: stall the frontend until we resume or redirect
-            thread_stats.fetch.stop.microcode_assist++;
-            stall_frontend = 1;
-        }
-
-        thread_stats.fetch.uops++;
         Waddr predrip = 0;
         bool redirectrip = false;
+        if unlikely (transop.already_predicted && isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
 
-        transop.rip = fetchrip;
-        transop.uuid = fetch_uuid++;
+        	//
+			// Handle loads and stores marked as unaligned in the unaligned
+			// predictor predecode information. These uops are split into two
+			// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
+			// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
+			// from this buffer instead of the basic block until both uops
+			// are forced into the pipeline.
+			//
 
-        if (isbranch(transop.opcode)) {
-            transop.predinfo.uuid = transop.uuid;
-            transop.predinfo.bptype =
-                (isclass(transop.opcode, OPCLASS_COND_BRANCH) << log2(BRANCH_HINT_COND)) |
-                (isclass(transop.opcode, OPCLASS_INDIR_BRANCH) << log2(BRANCH_HINT_INDIRECT)) |
-                (bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS)) << log2(BRANCH_HINT_CALL)) |
-                (bit(transop.extshift, log2(BRANCH_HINT_POP_RAS)) << log2(BRANCH_HINT_RET));
+			assert(transop.bbindex == current_basic_block_transop_index);
+			transop.synthop = synthop;
 
-            // SMP/SMT: Fill in with target thread ID (if the predictor supports this):
-            transop.predinfo.ctxid = 0;
-            transop.predinfo.ripafter = fetchrip + transop.bytes;
-            predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
+			current_basic_block_transop_index += (unaligned_ldst_buf.empty());
 
-            /*
-             * FIXME : Branchpredictor should never give the predicted address in
-             * different address space then fetchrip.  If its different, discard the
-             * predicted address.
-             */
-            if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
-                if(logable(10))
-                    ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
-                predrip = transop.riptaken;
-                redirectrip = 0;
-            } else {
-                redirectrip = 1;
-            }
+			transop.rip = fetchrip;
+			transop.uuid = fetch_uuid++;
+			transop.predinfo.uuid = transop.uuid;
+			transop.predinfo.bptype =
+				(isclass(transop.opcode, OPCLASS_COND_BRANCH) << log2(BRANCH_HINT_COND)) |
+				(isclass(transop.opcode, OPCLASS_INDIR_BRANCH) << log2(BRANCH_HINT_INDIRECT)) |
+				(bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS)) << log2(BRANCH_HINT_CALL)) |
+				(bit(transop.extshift, log2(BRANCH_HINT_POP_RAS)) << log2(BRANCH_HINT_RET));
 
-            thread_stats.branchpred.predictions++;
+			// SMP/SMT: Fill in with target thread ID (if the predictor supports this):
+			transop.predinfo.ctxid = 0;
+			transop.predinfo.ripafter = fetchrip + transop.bytes;
+			predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
+
+			/*
+			 * FIXME : Branchpredictor should never give the predicted address in
+			 * different address space then fetchrip.  If its different, discard the
+			 * predicted address.
+			 */
+			if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
+				if(logable(10))
+					ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
+				predrip = transop.riptaken;
+				redirectrip = 0;
+			} else {
+				redirectrip = 1;
+
+			}
+
+
+
+        } else {
+
+			//
+			// Handle loads and stores marked as unaligned in the unaligned
+			// predictor predecode information. These uops are split into two
+			// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
+			// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
+			// from this buffer instead of the basic block until both uops
+			// are forced into the pipeline.
+			//
+			if unlikely (transop.unaligned) {
+				split_unaligned(transop, unaligned_ldst_buf);
+				assert(unaligned_ldst_buf.get(transop, synthop));
+			}
+
+			assert(transop.bbindex == current_basic_block_transop_index);
+			transop.synthop = synthop;
+
+			current_basic_block_transop_index += (unaligned_ldst_buf.empty());
+
+			thread_stats.fetch.user_insns+=transop.som;
+			if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
+				// We've hit an assist: stall the frontend until we resume or redirect
+				thread_stats.fetch.stop.microcode_assist++;
+				stall_frontend = 1;
+			}
+
+			thread_stats.fetch.uops++;
+
+			transop.rip = fetchrip;
+			transop.uuid = fetch_uuid++;
+
+			if (isbranch(transop.opcode)) {
+				transop.predinfo.uuid = transop.uuid;
+				transop.predinfo.bptype =
+					(isclass(transop.opcode, OPCLASS_COND_BRANCH) << log2(BRANCH_HINT_COND)) |
+					(isclass(transop.opcode, OPCLASS_INDIR_BRANCH) << log2(BRANCH_HINT_INDIRECT)) |
+					(bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS)) << log2(BRANCH_HINT_CALL)) |
+					(bit(transop.extshift, log2(BRANCH_HINT_POP_RAS)) << log2(BRANCH_HINT_RET));
+
+				// SMP/SMT: Fill in with target thread ID (if the predictor supports this):
+				transop.predinfo.ctxid = 0;
+				transop.predinfo.ripafter = fetchrip + transop.bytes;
+				predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
+
+				/*
+				 * FIXME : Branchpredictor should never give the predicted address in
+				 * different address space then fetchrip.  If its different, discard the
+				 * predicted address.
+				 */
+				if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
+					if(logable(10))
+						ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
+					predrip = transop.riptaken;
+					redirectrip = 0;
+				} else {
+					redirectrip = 1;
+				}
+
+				thread_stats.branchpred.predictions++;
+			}
+
+			// Set up branches so mispredicts can be calculated correctly:
+			if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
+				if unlikely (predrip != transop.riptaken) {
+					assert(predrip == transop.ripseq);
+					transop.cond = invert_cond(transop.cond);
+					//
+					// We need to be careful here: we already looked up the synthop for this
+					// uop according to the old condition, so redo that here so we call the
+					// correct code for the swapped condition.
+					//
+					transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
+					swap(transop.riptaken, transop.ripseq);
+				}
+			}
+			else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
+				transop.riptaken = predrip;
+				transop.ripseq = predrip;
+			}
+
+			thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
+			transop.already_predicted = true;
         }
-
-        // Set up branches so mispredicts can be calculated correctly:
-        if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
-            if unlikely (predrip != transop.riptaken) {
-                assert(predrip == transop.ripseq);
-                transop.cond = invert_cond(transop.cond);
-                //
-                // We need to be careful here: we already looked up the synthop for this
-                // uop according to the old condition, so redo that here so we call the
-                // correct code for the swapped condition.
-                //
-                transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
-                swap(transop.riptaken, transop.ripseq);
-            }
-        }
-        else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
-            transop.riptaken = predrip;
-            transop.ripseq = predrip;
-        }
-
-        thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
 
         if likely (transop.eom) {
             fetchrip.rip += transop.bytes;
@@ -741,6 +792,7 @@ bool ThreadContext::fetch() {
                     break;
                 }
             }
+
         }
 
         fetchcount++;
