@@ -69,6 +69,10 @@ gdb.txt
 
 # Temp files
 *~
+
+# Code::Blocks files
 marss.cbp
 marss.layout
+
+# Disk image directory
 disk_images/

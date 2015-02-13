@@ -482,6 +482,7 @@ namespace OOO_CORE_MODEL {
         W16 index;
         W8 threadid;
         byte ld_st_truly_unaligned;
+        bool already_predicted = false;
 
         int init(int index) { this->index = index; return 0; }
         void validate() { }
@@ -1274,9 +1275,11 @@ namespace OOO_CORE_MODEL {
         Signal dcache_signal;
         Signal icache_signal;
 		Signal run_cycle;
+		Signal ibuffer_signal;
 
         bool dcache_wakeup(void *arg);
         bool icache_wakeup(void *arg);
+        bool ibuffer_wakeup(void *arg);
 
 		/* Debugging */
         void dump_state(ostream& os);
