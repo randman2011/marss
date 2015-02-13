@@ -1009,6 +1009,8 @@ namespace OOO_CORE_MODEL {
         bool stall_frontend;
         bool waiting_for_icache_fill;
         Waddr waiting_for_icache_fill_physaddr;
+        bool waiting_for_ibuffer_fill;
+        Waddr waiting_for_ibuffer_fill_physaddr;
         byte itlb_walk_level;
         bool probeitlb(Waddr fetchrip);
         void itlbwalk();

@@ -25,6 +25,12 @@ void MemoryHierarchy::icache_wakeup_wrapper(int coreid, W64 physaddr)
 			" address: ", hexstring(physaddr, 48), endl);
 }
 
+void MemoryHierarchy::ibuffer_wakeup_wrapper(int coreid, W64 physaddr)
+{
+	memdebug("IBuffer access completed for core: ", coreid,
+			" address: ", hexstring(physaddr, 48), endl);
+}
+
 void MemoryHierarchy::dcache_wakeup_wrapper(int coreid, int threadid,
 		int robid, W64 seq, W64 physaddr)
 {

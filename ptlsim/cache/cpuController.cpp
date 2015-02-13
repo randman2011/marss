@@ -153,7 +153,7 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 	return false;
 }
 
-bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
+/*bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
 {
 	W64 lineAddress;
 	assert(request->is_instruction());
@@ -173,7 +173,7 @@ bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
 
 	N_STAT_UPDATE(stats.cpurequest.count.miss.read, ++, request->is_kernel());
 	return false;
-}
+}*/
 
 int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
@@ -184,14 +184,14 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	if likely (interconnect == NULL) {
 		// From CPU
 		if unlikely (request->is_instruction()) {
-			if likely (!wrong_path) {
+			//if likely (!wrong_path) {
 				bool bufferHit = is_icache_buffer_hit(request);
 				if(bufferHit)
 					return 0;
 
 				fastPathLat = int_L1_i_->access_fast_path(this, request);
 				N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
-			} else {
+			} /*else {
 				bool bufferHit = is_ibuf_buffer_hit(request);
 				if(bufferHit)
 					return 0;
@@ -199,7 +199,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 				fastPathLat = int_ibuf_->access_fast_path(this, request);
 				N_STAT_UPDATE(stats.ibuf_latency, [fastPathLat]++, kernel_req);
 			}
-		} else {
+		}*/ else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
             N_STAT_UPDATE(stats.dcache_latency, [fastPathLat]++, kernel_req);
 		}
@@ -334,7 +334,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 
 	if unlikely (request->is_instruction()) {
 		W64 lineAddress = get_line_address(request);
-		if likely (!wrong_path) {
+		//if likely (!wrong_path) {
 			if likely (icacheBuffer_.isFull()) {
 				memdebug("Freeing icache buffer head\n");
 				icacheBuffer_.free(icacheBuffer_.head());
@@ -343,7 +343,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 			CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
 			bufEntry->lineAddress = lineAddress;
 			N_STAT_UPDATE(stats.icache_latency, [req_latency]++, kernel_req);
-		} else {
+		/*} else {
 			if likely (ibufBuffer_.isFull()) {
 				memdebug("Freeing ibuf buffer head\n");
 				ibufBuffer_.free(ibufBuffer_.head());
@@ -352,7 +352,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 			CPUControllerBufferEntry *bufEntry = ibufBuffer_.alloc();
 			bufEntry->lineAddress = lineAddress;
 			N_STAT_UPDATE(stats.ibuf_latency, [req_latency]++, kernel_req);
-		}
+		}*/
 	} else {
         N_STAT_UPDATE(stats.dcache_latency, [req_latency]++, kernel_req);
 	}

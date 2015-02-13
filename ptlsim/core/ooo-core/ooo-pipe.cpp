@@ -41,7 +41,6 @@ using namespace Memory;
  * @return Always return true
  */
 bool OooCore::icache_wakeup(void *arg) {
-<<<<<<< HEAD
 	Memory::MemoryRequest *request = (Memory::MemoryRequest*) arg;
 
 	W64 physaddr = request->get_physical_address();
@@ -71,32 +70,38 @@ bool OooCore::icache_wakeup(void *arg) {
 	}
 
 	return true;
-=======
-    Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
+}
 
-    W64 physaddr = request->get_physical_address();
-    if(logable(99)) ptl_logfile << " icache_wakeup addr ", (void*) physaddr, endl;
-    foreach (i, threadcount) {
-        ThreadContext* thread = threads[i];
-        if unlikely (thread
-                && thread->waiting_for_icache_fill
-                && thread->waiting_for_icache_fill_physaddr ==
-                floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
-            thread->waiting_for_icache_fill = 0;
-            thread->waiting_for_icache_fill_physaddr = 0;
-            if unlikely (thread->itlb_walk_level > 0) {
-                thread->itlb_walk_level--;
-                thread->itlbwalk();
-            }
-        }else{
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
-                " delivered ", (void*) physaddr,endl;
-        }
-    }
+bool OooCore::ibuffer_wakeup(void *arg) {
+	Memory::MemoryRequest *request = (Memory::MemoryRequest*) arg;
 
-    return true;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
+	W64 physaddr = request->get_physical_address();
+	if (logable(99))
+		ptl_logfile << " ibuffer_wakeup addr ", (void*) physaddr, endl;
+	foreach (i, threadcount)
+	{
+		ThreadContext* thread = threads[i];
+		if unlikely(
+				thread && thread->waiting_for_ibuffer_fill
+				&& thread->waiting_for_ibuffer_fill_physaddr
+				== floor(physaddr, ICACHE_FETCH_GRANULARITY))
+		{
+			if (logable(6))
+			ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-buffer wakeup of physaddr ", (void*) (Waddr) physaddr, endl;
+			thread->waiting_for_ibuffer_fill = 0;
+			thread->waiting_for_ibuffer_fill_physaddr = 0;
+			if unlikely (thread->itlb_walk_level > 0) {
+				thread->itlb_walk_level--;
+				thread->itlbwalk();
+			}
+		}
+		else {
+			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-buffer wait ", (void*)thread->waiting_for_ibuffer_fill_physaddr,
+			" delivered ", (void*) physaddr,endl;
+		}
+	}
+
+	return true;
 }
 
 /**
@@ -134,7 +139,6 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
  * @brief AVADH
  */
 void ThreadContext::itlbwalk() {
-<<<<<<< HEAD
 	if (logable(6)) {
 		ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ", itlb_walk_level, " virtaddr: ", (void*) (W64(
 				fetchrip)), endl;
@@ -191,61 +195,6 @@ void ThreadContext::itlbwalk() {
 		itlb_walk_level--;
 		itlbwalk();
 	}
-=======
-    if(logable(6)) {
-        ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ",
-                    itlb_walk_level, " virtaddr: ", (void*)(W64(fetchrip)), endl;
-    }
-
-    if unlikely (!itlb_walk_level) {
-itlb_walk_finish:
-        if(logable(6)) {
-            ptl_logfile << "itlbwalk finished for virtaddr: ", (void*)(W64(fetchrip)), endl;
-        }
-        itlb_walk_level = 0;
-        itlb.insert(fetchrip, threadid);
-        int delay = min(sim_cycle - itlb_miss_init_cycle, (W64)1000);
-        thread_stats.dcache.itlb_latency[delay]++;
-        waiting_for_icache_fill = 0;
-        return;
-    }
-
-    W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
-
-    if(pteaddr == (W64)-1) {
-        goto itlb_walk_finish;
-        return;
-    }
-
-    if(!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true)){
-        /* Cache queue is full.. so simply skip this iteration */
-        itlb_walk_level = 0;
-        return;
-    }
-
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
-    assert(request != NULL);
-
-    request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle,
-            true, 0, 0, Memory::MEMORY_OP_READ);
-    request->set_coreSignal(&core.icache_signal);
-
-    waiting_for_icache_fill_physaddr = floor(pteaddr, ICACHE_FETCH_GRANULARITY);
-    waiting_for_icache_fill = 1;
-
-    bool buf_hit = core.memoryHierarchy->access_cache(request);
-
-     /*
-      * We have a small buffer that returns true if the instruction access hits
-      * into that buffer. (This is implemented due to original PTLsim design...)
-      * So if we have a buffer hit, we simply reduce the itlb_walk_level and
-      * call the itlbwalk recursively.  Hope that this doesn't happen a lot
-      */
-    if(buf_hit) {
-        itlb_walk_level--;
-        itlbwalk();
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 }
 
 /**
@@ -279,7 +228,6 @@ static W32 phys_reg_files_writable_by_uop(const TransOp& uop) {
 
 void ThreadContext::annul_fetchq() {
 
-<<<<<<< HEAD
 	/*
 	 * There may be return address stack (RAS) updates from calls and returns
 	 * in the fetch queue that never made it to renaming, so they have no ROB
@@ -298,21 +246,6 @@ void ThreadContext::annul_fetchq() {
 			branchpred.annulras(fetchbuf.predinfo);
 		}
 	}
-=======
-     /*
-      * There may be return address stack (RAS) updates from calls and returns
-      * in the fetch queue that never made it to renaming, so they have no ROB
-      * that the core can annul normally. Therefore, we must go backwards in
-      * the fetch queue to annul these updates, in addition to checking the ROB.
-      */
-
-    foreach_backward (fetchq, i) {
-        FetchBufferEntry& fetchbuf = fetchq[i];
-        if unlikely (isbranch(fetchbuf.opcode) && (fetchbuf.predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET))) {
-            branchpred.annulras(fetchbuf.predinfo);
-        }
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 }
 
 /**
@@ -437,7 +370,6 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
  * are referenced, thus preventing them from being freed.
  */
 void ThreadContext::invalidate_smc() {
-<<<<<<< HEAD
 	if unlikely(smc_invalidate_pending)
 	{
 		if (logable(5))
@@ -447,14 +379,6 @@ void ThreadContext::invalidate_smc() {
 		if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
 		smc_invalidate_pending = 0;
 	}
-=======
-    if unlikely (smc_invalidate_pending) {
-        if (logable(5)) ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
-        bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
-        if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
-        smc_invalidate_pending = 0;
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 }
 
 /**
@@ -956,19 +880,11 @@ bool ThreadContext::fetch() {
  */
 BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp) {
 
-<<<<<<< HEAD
 	if likely (current_basic_block) {
 		/* Release our ref to the old basic block being fetched */
 		current_basic_block->release();
 		current_basic_block = NULL;
 	}
-=======
-    if likely (current_basic_block) {
-        /* Release our ref to the old basic block being fetched */
-        current_basic_block->release();
-        current_basic_block = NULL;
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
     BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
 
@@ -1003,7 +919,6 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
  */
 void ThreadContext::rename() {
 
-<<<<<<< HEAD
 	int prepcount = 0;
 
 	while (prepcount < FRONTEND_WIDTH) {
@@ -1084,88 +999,6 @@ void ThreadContext::rename() {
 		thread_stats.frontend.alloc.ldreg+=ld;
 		thread_stats.frontend.alloc.sfr+=st;
 		thread_stats.frontend.alloc.br+=br;
-=======
-    int prepcount = 0;
-
-    while (prepcount < FRONTEND_WIDTH) {
-        if unlikely (fetchq.empty()) {
-            thread_stats.frontend.status.fetchq_empty++;
-            break;
-        }
-
-        if unlikely (!ROB.remaining()) {
-            thread_stats.frontend.status.rob_full++;
-            break;
-        }
-
-        FetchBufferEntry& fetchbuf = *fetchq.peek();
-
-        int phys_reg_file = -1;
-
-        W32 acceptable_phys_reg_files = phys_reg_files_writable_by_uop(fetchbuf);
-
-        foreach (i, PHYS_REG_FILE_COUNT) {
-            int reg_file_to_check = add_index_modulo(core.round_robin_reg_file_offset, i, PHYS_REG_FILE_COUNT);
-            if likely (bit(acceptable_phys_reg_files, reg_file_to_check) && core.physregfiles[reg_file_to_check].remaining()) {
-                phys_reg_file = reg_file_to_check; break;
-            }
-        }
-
-        if (phys_reg_file < 0) {
-            thread_stats.frontend.status.physregs_full++;
-            break;
-        }
-
-        bool ld = isload(fetchbuf.opcode);
-        bool st = isstore(fetchbuf.opcode);
-        bool br = isbranch(fetchbuf.opcode);
-
-        if unlikely (ld && (loads_in_flight >= LDQ_SIZE)) {
-            thread_stats.frontend.status.ldq_full++;
-            break;
-        }
-
-        if unlikely (st && (stores_in_flight >= STQ_SIZE)) {
-            thread_stats.frontend.status.stq_full++;
-            break;
-        }
-
-        if unlikely ((ld|st) && (!LSQ.remaining())) {
-            break;
-        }
-
-        thread_stats.frontend.status.complete++;
-
-        FetchBufferEntry& transop = *fetchq.dequeue();
-        ReorderBufferEntry& rob = *ROB.alloc();
-        PhysicalRegister* physreg = NULL;
-
-        LoadStoreQueueEntry* lsqp = (ld|st) ? LSQ.alloc() : NULL;
-        LoadStoreQueueEntry& lsq = *lsqp;
-
-        rob.reset();
-        rob.uop = transop;
-        rob.entry_valid = 1;
-        rob.cycles_left = FRONTEND_STAGES;
-        rob.lsq = NULL;
-        if unlikely (ld|st) {
-            rob.lsq = &lsq;
-            lsq.rob = &rob;
-            lsq.store = st;
-            lsq.lfence = (transop.opcode == OP_mf) & ((transop.extshift & MF_TYPE_LFENCE) != 0);
-            lsq.sfence = (transop.opcode == OP_mf) & ((transop.extshift & MF_TYPE_SFENCE) != 0);
-            lsq.datavalid = 0;
-            lsq.addrvalid = 0;
-            lsq.invalid = 0;
-            loads_in_flight += (st == 0);
-            stores_in_flight += (st == 1);
-        }
-
-        thread_stats.frontend.alloc.reg+= (!(ld|st|br));
-        thread_stats.frontend.alloc.ldreg+=ld;
-        thread_stats.frontend.alloc.sfr+=st;
-        thread_stats.frontend.alloc.br+=br;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
 		thread_stats.rob_writes++;
 
@@ -1308,7 +1141,6 @@ void ThreadContext::rename() {
  */
 void ThreadContext::frontend() {
 
-<<<<<<< HEAD
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_frontend_list, rob, entry, nextentry)
 	{
@@ -1316,14 +1148,6 @@ void ThreadContext::frontend() {
 			rob->cycles_left = -1;
 			rob->changestate(rob_ready_to_dispatch_list);
 		}
-=======
-    ReorderBufferEntry* rob;
-    foreach_list_mutable(rob_frontend_list, rob, entry, nextentry) {
-        if unlikely (rob->cycles_left <= 0) {
-            rob->cycles_left = -1;
-            rob->changestate(rob_ready_to_dispatch_list);
-        }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
         rob->cycles_left--;
     }
@@ -1482,7 +1306,6 @@ static inline int find_first_set_bit(W32 v) {
  * @return 1 iff all operands were ready at dispatch time
  */
 bool ReorderBufferEntry::find_sources() {
-<<<<<<< HEAD
 	int operands_still_needed = 0;
 
 	issueq_tag_t uopids[MAX_OPERANDS];
@@ -1539,62 +1362,6 @@ bool ReorderBufferEntry::find_sources() {
 			insert(get_tag(), uopids, preready));
 
 	ThreadContext& thread = getthread();
-=======
-    int operands_still_needed = 0;
-
-    issueq_tag_t uopids[MAX_OPERANDS];
-    issueq_tag_t preready[MAX_OPERANDS];
-
-     /*
-      * Add dependency on memory fence (if any) to help avoid unneeded replays
-      */
-
-    if unlikely (isload(uop.opcode) | isstore(uop.opcode)) {
-        LoadStoreQueueEntry* fence = find_nearest_memory_fence();
-        if unlikely (fence) {
-            operands[RS] = fence->rob->physreg;
-            operands[RS]->addref(*this, threadid);
-            assert(operands[RS]->state != PHYSREG_FREE);
-        }
-    }
-
-    foreach (operand, MAX_OPERANDS) {
-        PhysicalRegister& source_physreg = *operands[operand];
-        ReorderBufferEntry& source_rob = *source_physreg.rob;
-
-        if likely (source_physreg.state == PHYSREG_WAITING) {
-            uopids[operand] = source_rob.get_tag();
-            preready[operand] = 0;
-            operands_still_needed++;
-        } else {
-            /* No need to wait for it */
-            uopids[operand] = 0;
-            preready[operand] = 1;
-        }
-
-        if likely (source_physreg.nonnull()) {
-            per_physregfile_stats_update(dispatch.source,
-                    source_physreg.rfid, [source_physreg.state]++);
-        }
-    }
-
-     /*
-      * Stores are special: we can issue a store even if its rc operand (the value
-      * to store) is not yet ready. In this case the store uop just checks for
-      * exceptions, establishes an STQ entry and gets replayed as a second phase
-      * store (this time around with the rc dependency required)
-      */
-
-    if unlikely (isstore(uop.opcode) && !load_store_second_phase) {
-        preready[RC] = 1;
-    }
-
-    bool ok;
-
-    issueq_operation_on_cluster_with_result(getcore(), cluster, ok, insert(get_tag(), uopids, preready));
-
-    ThreadContext& thread = getthread();
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
 #ifndef MULTI_IQ
     assert(thread.issueq_count >= 0 && thread.issueq_count <= ISSUE_QUEUE_SIZE);
@@ -1611,7 +1378,6 @@ bool ReorderBufferEntry::find_sources() {
 
 int ReorderBufferEntry::select_cluster() {
 
-<<<<<<< HEAD
 	if (MAX_CLUSTERS == 1) {
 		int cluster_issue_queue_avail_count[MAX_CLUSTERS];
 		getcore().sched_get_all_issueq_free_slots(
@@ -1670,56 +1436,6 @@ int ReorderBufferEntry::select_cluster() {
 	thread.thread_stats.dispatch.cluster[cluster]++;
 
 	return cluster;
-=======
-    if (MAX_CLUSTERS == 1) {
-        int cluster_issue_queue_avail_count[MAX_CLUSTERS];
-        getcore().sched_get_all_issueq_free_slots(cluster_issue_queue_avail_count);
-        return (cluster_issue_queue_avail_count[0] > 0) ? 0 : -1;
-    }
-
-    W32 executable_on_cluster = executable_on_cluster_mask;
-
-    int cluster_operand_tally[MAX_CLUSTERS];
-    foreach (i, MAX_CLUSTERS) { cluster_operand_tally[i] = 0; }
-    foreach (i, MAX_OPERANDS) {
-        PhysicalRegister& r = *operands[i];
-        if ((&r) && ((r.state == PHYSREG_WAITING) || (r.state == PHYSREG_BYPASS)) && (r.rob->cluster >= 0)) cluster_operand_tally[r.rob->cluster]++;
-    }
-
-    assert(executable_on_cluster);
-
-    /* If a given cluster's issue queue is full, try another cluster: */
-    int cluster_issue_queue_avail_count[MAX_CLUSTERS];
-    W32 cluster_issue_queue_avail_mask = 0;
-
-    getcore().sched_get_all_issueq_free_slots(cluster_issue_queue_avail_count);
-
-    foreach (i, MAX_CLUSTERS) {
-        cluster_issue_queue_avail_mask |= ((cluster_issue_queue_avail_count[i] > 0) << i);
-    }
-
-    executable_on_cluster &= cluster_issue_queue_avail_mask;
-
-    if unlikely (!executable_on_cluster) {
-        return -1;
-    }
-
-    int n = 0;
-    int cluster = find_first_set_bit(executable_on_cluster);
-
-    foreach (i, MAX_CLUSTERS) {
-        if ((cluster_operand_tally[i] > n) && bit(executable_on_cluster, i)) {
-            n = cluster_operand_tally[i];
-            cluster = i;
-        }
-    }
-
-    ThreadContext& thread = getthread();
-    thread.thread_stats.dispatch.cluster[cluster]++;
-
-
-    return cluster;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 }
 
 /**
@@ -1730,15 +1446,9 @@ int ReorderBufferEntry::select_cluster() {
  */
 int ThreadContext::dispatch() {
 
-<<<<<<< HEAD
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_dispatch_list, rob, entry, nextentry) {
 		if unlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
-=======
-    ReorderBufferEntry* rob;
-    foreach_list_mutable(rob_ready_to_dispatch_list, rob, entry, nextentry) {
-        if unlikely (core.dispatchcount >= DISPATCH_WIDTH) break;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
         /* All operands start out as valid, then get put on wait queues if they are not actually ready. */
 
@@ -1814,7 +1524,6 @@ int ThreadContext::dispatch() {
 
     CORE_STATS(dispatch.width)[core.dispatchcount]++;
 
-<<<<<<< HEAD
 	if likely (core.dispatchcount) {
 		dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES + pause_counter;
 	} else if unlikely (!rob_ready_to_dispatch_list.empty()) {
@@ -1824,17 +1533,6 @@ int ThreadContext::dispatch() {
 			dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
 			return -1;
 		}
-=======
-    if likely (core.dispatchcount) {
-        dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES + pause_counter;
-    } else if unlikely (!rob_ready_to_dispatch_list.empty()) {
-        dispatch_deadlock_countdown--;
-        if (!dispatch_deadlock_countdown) {
-            redispatch_deadlock_recovery();
-            dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
-            return -1;
-        }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
     }
 
@@ -1867,7 +1565,6 @@ int ThreadContext::complete(int cluster) {
     foreach_list_mutable(rob_issued_list[cluster], rob, entry, nextentry) {
         rob->cycles_left--;
 
-<<<<<<< HEAD
 		if unlikely (rob->cycles_left <= 0) {
 			rob->changestate(rob_completed_list[cluster]);
 			rob->physreg->complete();
@@ -1876,16 +1573,6 @@ int ThreadContext::complete(int cluster) {
 			completecount++;
 		}
 	}
-=======
-        if unlikely (rob->cycles_left <= 0) {
-            rob->changestate(rob_completed_list[cluster]);
-            rob->physreg->complete();
-            rob->forward_cycle = 0;
-            rob->fu = 0;
-            completecount++;
-        }
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
     return 0;
 }
@@ -1900,7 +1587,6 @@ int ThreadContext::complete(int cluster) {
  */
 int ThreadContext::transfer(int cluster) {
 
-<<<<<<< HEAD
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_completed_list[cluster], rob, entry, nextentry) {
 		rob->forward();
@@ -1909,16 +1595,6 @@ int ThreadContext::transfer(int cluster) {
 			rob->forward_cycle = MAX_FORWARDING_LATENCY;
 			rob->changestate(rob_ready_to_writeback_list[rob->cluster]);
 		}
-=======
-    ReorderBufferEntry* rob;
-    foreach_list_mutable(rob_completed_list[cluster], rob, entry, nextentry) {
-        rob->forward();
-        rob->forward_cycle++;
-        if unlikely (rob->forward_cycle > MAX_FORWARDING_LATENCY) {
-            rob->forward_cycle = MAX_FORWARDING_LATENCY;
-            rob->changestate(rob_ready_to_writeback_list[rob->cluster]);
-        }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
 		thread_stats.rob_reads++;
     }
@@ -1935,18 +1611,11 @@ int ThreadContext::transfer(int cluster) {
  */
 int ThreadContext::writeback(int cluster) {
 
-<<<<<<< HEAD
 	int wakeupcount = 0;
 	ReorderBufferEntry* rob;
 	foreach_list_mutable(rob_ready_to_writeback_list[cluster], rob, entry,
 			nextentry) {
 		if unlikely (core.writecount >= WRITEBACK_WIDTH) break;
-=======
-    int wakeupcount = 0;
-    ReorderBufferEntry* rob;
-    foreach_list_mutable(rob_ready_to_writeback_list[cluster], rob, entry, nextentry) {
-        if unlikely (core.writecount >= WRITEBACK_WIDTH) break;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
         /*
          * Gather statistics
@@ -2075,19 +1744,11 @@ int ThreadContext::commit() {
     foreach_forward(ROB, i) {
         ReorderBufferEntry& rob = ROB[i];
 
-<<<<<<< HEAD
 		if unlikely (core.commitcount >= COMMIT_WIDTH) break;
 		rc = rob.commit();
 		if likely (rc == COMMIT_RESULT_OK) {
 			core.commitcount++;
 			last_commit_at_cycle = sim_cycle;
-=======
-        if unlikely (core.commitcount >= COMMIT_WIDTH) break;
-        rc = rob.commit();
-        if likely (rc == COMMIT_RESULT_OK) {
-            core.commitcount++;
-            last_commit_at_cycle = sim_cycle;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 			thread_stats.rob_reads++;
         } else {
             break;
@@ -2171,7 +1832,6 @@ namespace OOO_CORE_MODEL {
  * @return commit status
  */
 int ReorderBufferEntry::commit() {
-<<<<<<< HEAD
 	OooCore& core = getcore();
 	ThreadContext& thread = getthread();
 	Context& ctx = thread.ctx;
@@ -2269,47 +1929,13 @@ int ReorderBufferEntry::commit() {
 			 */
 			ctx.exception = LO32(subrob.physreg->data);
 			ctx.error_code = HI32(subrob.physreg->data);
-=======
-    OooCore& core = getcore();
-    ThreadContext& thread = getthread();
-    Context& ctx = thread.ctx;
-    bool all_ready_to_commit = true;
-    bool macro_op_has_exceptions = false;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
-/*
- *
- *     If the uop currently at the head of the ROB is a memory fence,
- *     "issue" it at commit time, to let dependent uops (in the same
- *     macro-op or future macro-ops, assuming no intervening fences)
- *     wake up and complete.
- *
- *     Additionally, if the fence is marked as non-internal (i.e.
- *     it's the last memory-related uop in the macro-op), release
- *     all pending locks queued by ld.acq uops.
- *
- *
- *
- *     Check the head of the ROB to see if it's a memory fence.
- *     If so, it's now safe to "wake up" the mf uop at commit
- *     time (rather than issue time), thereby allowing loads
- *     and/or stores after the fence to successfully issue.
- *
- *     Notice that this happens in program order even if some
- *     uops in the macro-op have not yet completed. This is
- *     required to avoid deadlock in the case where the mf
- *     uop is the first uop in the macro-op. In this case,
- *     its P (internal) bit must be set.
- *
- *     Note that in order to have a flush, this must be the
- *     fence immediately after an locked RMW instruction,
- *     as the lock is just added to the flush list at the
- *     commit of the load (the R part), which will definitely
- *     happen after the commit of the preceeding fence.
- *
- */
+			/* Capture the faulting virtual address for page faults */
+            if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
+                    (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
+                ctx.page_fault_addr = subrob.origvirt;
+            }
 
-<<<<<<< HEAD
 			macro_op_has_exceptions = true;
 			all_ready_to_commit = true;
 			found_eom = true;
@@ -2359,123 +1985,6 @@ int ReorderBufferEntry::commit() {
 				}
 			}
 		}
-=======
-    if unlikely ((uop.opcode == OP_mf) && ready_to_commit() && (!load_store_second_phase)) {
-        fencewakeup();
-        thread.flush_mem_lock_release_list();
-    }
-
-    /*
-     *
-     * Each x86 instruction may be composed of multiple uops; none of the uops
-     * may commit until ALL uops are ready to commit (either correctly or
-     * if one or more uops have exceptions).
-     *
-     * This is accomplished by checking if the uop at the head of the ROB (next
-     * to commit) has its SOM (start of macro-op) bit set. If so, the ROB is
-     * scanned forwards from the SOM uop to the EOM (end of macro-op) uop. If
-     * all uops in this range are ready to commit and are exception-free, the
-     * SOM uop allowed to commit.
-     *
-     * Any exceptions in the macro-op uop range immediately signals an exception
-     * to the user code, and no part of the uop is committed. In any case,
-     * asynchronous interrupts are only taken after committing or excepting the
-     * EOM uop in a macro-op.
-     *
-     */
-
-    bool found_eom = 0;
-    ReorderBufferEntry* cant_commit_subrob = NULL;
-
-    foreach_forward_from(thread.ROB, this, j) {
-        ReorderBufferEntry& subrob = thread.ROB[j];
-
-        found_eom |= subrob.uop.eom;
-
-        if unlikely (!subrob.ready_to_commit()) {
-            all_ready_to_commit = false;
-            cant_commit_subrob = &subrob;
-        }
-
-        if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
-            subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
-            subrob.physreg->flags = FLAG_INV;
-            if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
-        }
-
-        if unlikely (subrob.ready_to_commit() &&
-                (subrob.physreg->flags & FLAG_INV) &&
-                (subrob.uop.opcode != OP_ast)) {
-
-            /*
-             *  The exception is definitely going to happen, since the
-             *  excepting instruction is at the head of the ROB. However,
-             *  we don't know which uop within the instruction actually
-             *  had the problem, e.g. if it's a load-alu-store insn, the
-             *  load is OK but the store has PageFaultOnWrite. We take
-             *  the first exception in uop order.
-             *
-             */
-            ctx.exception = LO32(subrob.physreg->data);
-            ctx.error_code = HI32(subrob.physreg->data);
-
-            /* Capture the faulting virtual address for page faults */
-            if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
-                    (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
-                ctx.page_fault_addr = subrob.origvirt;
-            }
-
-            macro_op_has_exceptions = true;
-            all_ready_to_commit = true;
-            found_eom = true;
-            break;
-        }
-
-        if likely (subrob.uop.eom) break;
-    }
-
-     /*
-      * Protect against the extremely rare case where only one x86
-      * instruction is in flight and its EOM uop has not even made
-      * it into the ROB by the time the first uop is ready to commit.
-      */
-
-
-    all_ready_to_commit &= found_eom;
-
-    if unlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
-            thread.thread_stats.commit.result.none++;
-
-            if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
-                    thread.thread_stats.commit.fail.free_list++;
-            } else if (cant_commit_subrob->current_state_list == &getthread().rob_frontend_list) {
-                    thread.thread_stats.commit.fail.frontend_list++;
-            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_dispatch_list) {
-                    thread.thread_stats.commit.fail.ready_to_dispatch_list++;
-            } else if (cant_commit_subrob->current_state_list == &getthread().rob_cache_miss_list) {
-                    thread.thread_stats.commit.fail.cache_miss_list++;
-            } else if (cant_commit_subrob->current_state_list == &getthread().rob_tlb_miss_list) {
-                    thread.thread_stats.commit.fail.tlb_miss_list++;
-            } else if (cant_commit_subrob->current_state_list == &getthread().rob_memory_fence_list) {
-                    thread.thread_stats.commit.fail.memory_fence_list++;
-            } else {
-                    foreach(j, MAX_CLUSTERS) {
-                            if(cant_commit_subrob->current_state_list == &getthread().rob_dispatched_list[j]) {
-                                    thread.thread_stats.commit.fail.dispatched_list++;
-                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_issue_list[j]) {
-                                    thread.thread_stats.commit.fail.ready_to_issue_list++;
-                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_store_list[j]) {
-                                    thread.thread_stats.commit.fail.ready_to_store_list++;
-                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_load_list[j]) {
-                                    thread.thread_stats.commit.fail.ready_to_load_list++;
-                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_completed_list[j]) {
-                                    thread.thread_stats.commit.fail.completed_list++;
-                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_writeback_list[j]) {
-                                    thread.thread_stats.commit.fail.ready_to_writeback_list++;
-                            }
-                    }
-            }
-
         if(logable(5)) {
             ptl_logfile << "Can't Commit ROB entry: ", *this, " because subrob: ",
                         *cant_commit_subrob, endl;
@@ -2492,7 +2001,6 @@ int ReorderBufferEntry::commit() {
     }
 
     PhysicalRegister* oldphysreg = thread.commitrrt[uop.rd];
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
 	thread.thread_stats.rob_reads++;
 	thread.thread_stats.rename_table_reads++;
@@ -2608,120 +2116,6 @@ int ReorderBufferEntry::commit() {
 
     release_mem_lock();
 
-<<<<<<< HEAD
-	bool ld = isload(uop.opcode);
-	bool st = isstore(uop.opcode);
-	bool br = isbranch(uop.opcode);
-
-	/* check if we can access dcache for store */
-	if (st
-			&& !core.memoryHierarchy->is_cache_available(core.get_coreid(),
-					threadid, false/* icache */)) {
-		msdebug << " dcache can not write. core:", core.get_coreid(), " threadid ", threadid, endl;
-		thread.thread_stats.commit.result.dcache_stall++;
-		return COMMIT_RESULT_NONE;
-	}
-
-	thread.thread_stats.commit.opclass[opclassof(uop.opcode)]++;
-	if unlikely (macro_op_has_exceptions) {
-
-		/* See notes in handle_exception(): */
-		if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
-			thread.chk_recovery_rip = ctx.eip + uop.bytes;
-			thread.thread_stats.commit.result.skipblock++;
-		} else {
-			thread.thread_stats.commit.result.exception++;
-		}
-
-		if(logable(10)) {
-			ptl_logfile << "ROB Commit failed because Exception ",
-			ctx.exception, endl, flush;
-		}
-
-		return COMMIT_RESULT_EXCEPTION;
-	}
-
-	/*
-	 *
-	 *  Check for self modifying code (SMC) by checking if any previous
-	 *  instruction has dirtied the page(s) on which the current instruction
-	 *  resides. The SMC check is done first since it's perfectly legal for a
-	 *  store to overwrite its own instruction bytes, but this update only
-	 *  becomes visible after the store has committed.
-	 *
-	 */
-	if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
-
-		/*
-		 * Invalidate the pages only after the pipeline is flushed: we may still
-		 * hold refs to the affected basic blocks in the pipeline. Queue the
-		 * updates for later.
-		 */
-
-		thread.smc_invalidate_pending = 1;
-		thread.smc_invalidate_rvp = uop.rip;
-
-		thread.thread_stats.commit.result.smc++;
-		return COMMIT_RESULT_SMC;
-	}
-
-	assert(ready_to_commit());
-
-	/*
-	 *
-	 * If this is a store uop, we must check for an outstanding lock
-	 * on the target address held by some other thread (local locks
-	 * are ignored), and if a lock is found, we block commit until
-	 * the lock is released.
-	 *
-	 * Without this check, we could have the following scenario:
-	 * - Thread 0 issues non-locked store. It checks for locks at
-	 *   issue time, but none are found, so it proceeds
-	 * - Thread 1 issues a locked load, modify and locked store
-	 * - Thread 0 non-locked store commits
-	 * - Thread 1 locked store commits
-	 *
-	 * Notice that thread 0's store is lost, since it's overwritten
-	 * by thread 1's store. If thread 0 is doing a store to release
-	 * a spinlock (which is perfectly safe without the LOCK prefix),
-	 * but thread 1's store attempts to acquire the spinlock, the
-	 * release will never appear, and thread 1 will spin forever.
-	 *
-	 */
-
-	if unlikely (uop.opcode == OP_st) {
-		W64 lockaddr = lsq->physaddr << 3;
-		bool lock = core.memoryHierarchy->probe_lock(lockaddr,
-				thread.ctx.cpu_index);
-
-		if unlikely (!lock) {
-			thread.thread_stats.commit.result.memlocked++;
-			return COMMIT_RESULT_NONE;
-		}
-	}
-
-	/*
-	 *
-	 *     Update architectural state:
-	 *     (this is the point of no return)
-	 *
-	 *
-	 *
-	 *     Once we're satisfied that all uops in the current x86 instruction
-	 *     are complete and can commit, enqueue a memory lock release for
-	 *     any ld.acq uops that have not already released their lock.
-	 *
-	 *     This actually unlocks the chunk(s) ONLY after ALL uops in the
-	 *     current macro-op have committed. This is required since the
-	 *     other threads know nothing about remote store queues: unless
-	 *     the value is committed to the cache (where cache coherency can
-	 *     control its use), other loads in other threads could slip in
-	 *     and get incorrect values.
-	 *
-	 */
-
-	release_mem_lock();
-
 	//
 	// For debugging purposes, check the list of address ranges specified
 	// with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If
@@ -2729,15 +2123,6 @@ int ReorderBufferEntry::commit() {
 	// more than (value of -deadlock-debug-limit) commits, dump all state,
 	// dump the event log and abort the simulation.
 	//
-=======
-    //
-    // For debugging purposes, check the list of address ranges specified
-    // with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If
-    // the commit rip has been within one of these ranges on this vcpu for
-    // more than (value of -deadlock-debug-limit) commits, dump all state,
-    // dump the event log and abort the simulation.
-    //
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 #if 0
     {
         W64 rip = uop.rip.rip;
@@ -2801,21 +2186,12 @@ int ReorderBufferEntry::commit() {
     }
     assert(ctx.get_cs_eip() == uop.rip);
 
-<<<<<<< HEAD
 	if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
 
 	if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
 		setup_checker(ctx.cpu_index);
 		reset_checker_stores();
 	}
-=======
-    if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
-
-    if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
-        setup_checker(ctx.cpu_index);
-        reset_checker_stores();
-    }
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
     if (logable(10)) {
         ptl_logfile << "ROB Commit RIP check Done...\n", flush;
@@ -2825,17 +2201,10 @@ int ReorderBufferEntry::commit() {
      * The commit of all uops in the x86 macro-op is guaranteed to happen after this point
      */
 
-<<<<<<< HEAD
 	if likely (archdest_can_commit[uop.rd]) {
 		thread.commitrrt[uop.rd]->uncommitref(uop.rd, thread.threadid);
 		thread.commitrrt[uop.rd] = physreg;
 		thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
-=======
-    if likely (archdest_can_commit[uop.rd]) {
-        thread.commitrrt[uop.rd]->uncommitref(uop.rd, thread.threadid);
-        thread.commitrrt[uop.rd] = physreg;
-        thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
         if likely (uop.rd < ARCHREG_COUNT) {
             ctx.set_reg(uop.rd, physreg->data);
@@ -2848,7 +2217,6 @@ int ReorderBufferEntry::commit() {
 
 		thread.thread_stats.physreg_reads[physreg->rfid]++;
 
-<<<<<<< HEAD
 		physreg->rob = NULL;
 	}
 
@@ -3037,194 +2405,6 @@ int ReorderBufferEntry::commit() {
 		total_insns_committed++;
 		thread.thread_stats.commit.insns++;
 		thread.total_insns_committed++;
-=======
-        physreg->rob = NULL;
-    }
-
-    if likely (uop.eom) {
-        if unlikely (uop.rd == REG_rip) {
-            assert(isbranch(uop.opcode));
-
-            if(logable(10))
-                ptl_logfile << "destination is REG_rip : ", physreg->data, endl, flush;
-
-            if(uop.riptaken != physreg->data) {
-                if(logable(6)) {
-                    ptl_logfile << "branch misprediction: assumed-rip: ",
-                                uop.riptaken, " actual-rip: ", physreg->data,
-                                endl;
-                }
-                /* Annul the remaining ROB entries and fetch new code */
-                thread.annul_fetchq();
-                annul_after();
-                thread.reset_fetch_unit(physreg->data);
-                thread.thread_stats.issue.result.branch_mispredict++;
-            }
-            assert(physreg->data);
-            ctx.eip = physreg->data;
-        } else {
-            assert(!isbranch(uop.opcode));
-            ctx.eip += uop.bytes;
-        }
-    }
-
-    if likely ((!ld) & (!st) & (!uop.nouserflags)) {
-        W64 flagmask = setflags_to_x86_flags[uop.setflags];
-
-        /* If Assist opcode, it might have updated the Interrupt flag */
-        if(uop.opcode == OP_ast)
-            flagmask |= IF_MASK;
-        ctx.reg_flags = (ctx.reg_flags & ~flagmask) | (physreg->flags & flagmask);
-
-        thread.thread_stats.commit.setflags.no += (uop.setflags == 0);
-        thread.thread_stats.commit.setflags.yes += (uop.setflags != 0);
-
-        if likely (uop.setflags & SETFLAG_ZF) {
-            thread.commitrrt[REG_zf]->uncommitref(REG_zf, thread.threadid);
-            thread.commitrrt[REG_zf] = physreg;
-            thread.commitrrt[REG_zf]->addcommitref(REG_zf, thread.threadid);
-        }
-        if likely (uop.setflags & SETFLAG_CF) {
-            thread.commitrrt[REG_cf]->uncommitref(REG_cf, thread.threadid);
-            thread.commitrrt[REG_cf] = physreg;
-            thread.commitrrt[REG_cf]->addcommitref(REG_cf, thread.threadid);
-        }
-        if likely (uop.setflags & SETFLAG_OF) {
-            thread.commitrrt[REG_of]->uncommitref(REG_of, thread.threadid);
-            thread.commitrrt[REG_of] = physreg;
-            thread.commitrrt[REG_of]->addcommitref(REG_of, thread.threadid);
-        }
-    }
-
-    if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
-        bool mmio = (lsq != NULL) ? lsq->mmio : false;
-        if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
-                uop.rip.rip != ctx.eip && !mmio) {
-            execute_checker();
-            compare_checker(ctx.cpu_index, setflags_to_x86_flags[uop.setflags]);
-        } else {
-            clear_checker();
-        }
-    }
-
-    if unlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
-        cout << "\nStarting the checker\n";
-        config.checker_enabled = true;
-        enable_checker();
-    }
-
-
-    if unlikely (uop.opcode == OP_st) {
-        thread.ctx.smc_setdirty(lsq->physaddr << 3);
-
-        if(uop.internal) {
-            thread.ctx.store_internal(lsq->virtaddr, lsq->data,
-                    lsq->bytemask);
-        } else if(lsq->bytemask){
-             /*
-              * Because of QEMU we might have page fault while storing the data
-              * so make sure that in case of page fault its handle at correct
-              * location in simulation and not here..
-              */
-            assert(lsq->physaddr);
-
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
-            assert(request != NULL);
-
-            request->init(core.get_coreid(), threadid, lsq->physaddr << 3, 0,
-                    sim_cycle, false, uop.rip.rip, uop.uuid,
-                    Memory::MEMORY_OP_WRITE);
-            request->set_coreSignal(&core.dcache_signal);
-
-            assert(core.memoryHierarchy->access_cache(request));
-            assert(lsq->virtaddr > 0xfff);
-            if(config.checker_enabled && !ctx.kernel_mode) {
-                add_checker_store(lsq, uop.size);
-            } else {
-                thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
-            }
-            lsq->datavalid = 1;
-        }
-    }
-
-    if(uop.eom && !ctx.kernel_mode && config.checker_enabled && is_checker_valid()) {
-        foreach(i, checker_stores_count) {
-            thread.ctx.check_store_virt(checker_stores[i].virtaddr,
-                    checker_stores[i].data, checker_stores[i].bytemask,
-                    checker_stores[i].sizeshift);
-        }
-        reset_checker_stores();
-    }
-
-     /*
-      * Free physical registers, load/store queue entries, etc.
-      */
-
-    if unlikely (ld|st) {
-        assert(lsq->data == physreg->data);
-        thread.loads_in_flight -= (lsq->store == 0);
-        thread.stores_in_flight -= (lsq->store == 1);
-        lsq->reset();
-        thread.LSQ.commit(lsq);
-        core.set_unaligned_hint(uop.rip, uop.ld_st_truly_unaligned);
-    }
-
-    assert(archdest_can_commit[uop.rd]);
-    assert(oldphysreg->state == PHYSREG_ARCH);
-
-    if likely (oldphysreg->nonnull()) {
-        if unlikely (oldphysreg->referenced()) {
-            oldphysreg->changestate(PHYSREG_PENDINGFREE);
-            CORE_STATS(commit.freereg.pending)++;
-        } else  {
-            oldphysreg->free();
-            CORE_STATS(commit.freereg.free)++;
-        }
-    }
-
-    if likely (!(br|st)) {
-        int k = clipto((int)consumer_count, 0,
-                    thread.thread_stats.frontend.consumer_count.length() -1);
-        thread.thread_stats.frontend.consumer_count[k]++;
-    }
-
-    physreg->changestate(PHYSREG_ARCH);
-
-     /*
-      * Unlock operand physregs since we no longer need to worry about speculation recovery
-      * Technically this can be done after the issue queue entry is released, but we do it
-      * here for simplicity.
-      */
-
-    foreach (i, MAX_OPERANDS) {
-        operands[i]->unref(*this, thread.threadid);
-    }
-
-     /*
-      * Update branch prediction
-      */
-
-    if unlikely (isclass(uop.opcode, OPCLASS_BRANCH)) {
-        assert(uop.eom);
-
-         /*
-          * NOTE: Technically the "branch address" refers to the rip of the *next*
-          * x86 instruction after the branch; we use this consistently since x86
-          * instructions vary in length and we cannot easily calculate the next
-          * instruction in sequence from within the branch predictor logic.
-          */
-
-        W64 end_of_branch_x86_insn = uop.rip + uop.bytes;
-
-        thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.get_cs_eip());
-        thread.thread_stats.branchpred.updates++;
-    }
-
-    if likely (uop.eom) {
-        total_insns_committed++;
-        thread.thread_stats.commit.insns++;
-        thread.total_insns_committed++;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 
 #ifdef TRACE_RIP
             ptl_rip_trace << "commit_rip: ",
@@ -3232,7 +2412,6 @@ int ReorderBufferEntry::commit() {
                           "simcycle: ", sim_cycle, "\tkernel: ",
                           uop.rip.kernel, endl;
 #endif
-<<<<<<< HEAD
 		// if(uop.rip.rip > 0x7f0000000000)
 		// per_core_event_update(core.coreid, insns_in_mode.userlib++);
 	}
@@ -3268,43 +2447,6 @@ int ReorderBufferEntry::commit() {
 
 	thread.thread_stats.commit.result.ok++;
 	return COMMIT_RESULT_OK;
-=======
-        // if(uop.rip.rip > 0x7f0000000000)
-        // per_core_event_update(core.coreid, insns_in_mode.userlib++);
-    }
-
-    if (logable(10)) {
-        ptl_logfile << "ROB Commit Done...\n", flush;
-    }
-
-    total_uops_committed++;
-    thread.thread_stats.commit.uops++;
-    thread.total_uops_committed++;
-
-    bool uop_is_eom = uop.eom;
-    bool uop_is_barrier = isclass(uop.opcode, OPCLASS_BARRIER);
-    changestate(thread.rob_free_list);
-    reset();
-    thread.ROB.commit(*this);
-
-    if unlikely (uop_is_barrier) {
-        thread.thread_stats.commit.result.barrier_t++;
-        return COMMIT_RESULT_BARRIER;
-    }
-
-    if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-        ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
-        return COMMIT_RESULT_STOP;
-    }
-
-    if unlikely (uop_is_eom & thread.handle_interrupt_at_next_eom) {
-        thread.handle_interrupt_at_next_eom = 0;
-        return COMMIT_RESULT_INTERRUPT;
-    }
-
-    thread.thread_stats.commit.result.ok++;
-    return COMMIT_RESULT_OK;
->>>>>>> 5eeea0100824d6018d029f314f675fab1af45b32
 }
 
 namespace OOO_CORE_MODEL {
