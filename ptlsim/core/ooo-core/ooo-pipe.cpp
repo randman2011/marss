@@ -686,8 +686,20 @@ bool ThreadContext::fetch() {
 
 			}
 
-
-
+			// Set up branches so mispredicts can be calculated correctly:
+			if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
+				if unlikely (predrip != transop.riptaken) {
+					assert(predrip == transop.ripseq);
+					transop.cond = invert_cond(transop.cond);
+					//
+					// We need to be careful here: we already looked up the synthop for this
+					// uop according to the old condition, so redo that here so we call the
+					// correct code for the swapped condition.
+					//
+					transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
+					swap(transop.riptaken, transop.ripseq);
+				}
+			}
         } else {
 
 			//
