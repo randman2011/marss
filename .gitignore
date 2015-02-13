@@ -62,6 +62,7 @@ gdb.txt
 
 # Any patch files
 *.patch
+<<<<<<< HEAD
 
 # Eclipse files
 .cproject
@@ -71,3 +72,5 @@ gdb.txt
 *~
 marss.cbp
 marss.layout
+=======
+>>>>>>> parent of 9915b5c... created FIXMEs for wrong path fetch in correct location
