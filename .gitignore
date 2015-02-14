@@ -69,6 +69,7 @@ gdb.txt
 
 # Temp files
 *~
+*.backup
 
 # Code::Blocks files
 marss.cbp
