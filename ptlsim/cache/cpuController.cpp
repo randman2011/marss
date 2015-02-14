@@ -51,7 +51,7 @@ CPUController::CPUController(W8 coreid, const char *name,
 //	int_ibuf_ = NULL;
 	int_L1_d_ = NULL;
 	icacheLineBits_ = 0;
-//	ibufLineBits_ = 0;
+	ibufLineBits_ = 0;
 	dcacheLineBits_ = 0;
 
     SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
@@ -153,7 +153,7 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 	return false;
 }
 
-/*bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
+bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
 {
 	W64 lineAddress;
 	assert(request->is_instruction());
@@ -173,7 +173,19 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 
 	N_STAT_UPDATE(stats.cpurequest.count.miss.read, ++, request->is_kernel());
 	return false;
-}*/
+}
+
+bool CPUController::is_icache_hit(MemoryRequest *request)
+{
+	bool ret_val = is_icache_buffer_hit(request);
+	return ret_val;
+}
+
+bool CPUController::is_ibuffer_hit(MemoryRequest *request)
+{
+	bool ret_val = is_ibuf_buffer_hit(request);
+	return ret_val;
+}
 
 int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)

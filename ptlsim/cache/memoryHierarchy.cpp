@@ -88,6 +88,24 @@ bool MemoryHierarchy::access_cache(MemoryRequest *request)
   return false;
 }
 
+bool MemoryHierarchy::is_icache_hit(MemoryRequest *request)
+{
+	W8 coreid = request->get_coreid();
+	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
+	assert (cpuController != NULL);
+	bool ret_val = ((CPUController*)cpuController)->is_icache_hit(request);
+	return ret_val;
+}
+
+bool MemoryHierarchy::is_ibuffer_hit(MemoryRequest *request)
+{
+	W8 coreid = request->get_coreid();
+	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
+	assert (cpuController != NULL);
+	bool ret_val = ((CPUController*)cpuController)->is_ibuffer_hit(request);
+	return ret_val;
+}
+
 void MemoryHierarchy::clock()
 {
   // First clock all the cpu controllers

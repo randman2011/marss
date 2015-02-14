@@ -106,6 +106,7 @@ class CPUController : public Controller
 		Interconnect *int_L1_i_;
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
+		int ibufLineBits_;
 		int dcacheLineBits_;
 
 		Signal cacheAccess_;
@@ -122,6 +123,7 @@ class CPUController : public Controller
 			CPU_CONT_ICACHE_BUF_SIZE> ibufBuffer_;
 
 		bool is_icache_buffer_hit(MemoryRequest *request) ;
+		bool is_ibuf_buffer_hit(MemoryRequest *request) ;
 
 		CPUControllerQueueEntry* find_dependency(MemoryRequest *request);
 
@@ -147,6 +149,8 @@ class CPUController : public Controller
 
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
+		bool is_icache_hit(MemoryRequest *request);
+		bool is_ibuffer_hit(MemoryRequest *request);
 		void clock();
         void register_interconnect(Interconnect *interconnect, int type);
 		void register_interconnect_L1_d(Interconnect *interconnect);
@@ -167,6 +171,10 @@ class CPUController : public Controller
 
 		int access(MemoryRequest *request) {
 			return access_fast_path(NULL, request);
+		}
+
+		bool is_hit(MemoryRequest *request) {
+			return is_icache_hit(request);
 		}
 
 		bool is_full(bool fromInterconnect = false) const {

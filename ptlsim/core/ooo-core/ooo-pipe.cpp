@@ -651,7 +651,14 @@ bool ThreadContext::fetch() {
                     true, 0, 0, Memory::MEMORY_OP_READ);
             request->set_coreSignal(&core.icache_signal);
 
-            hit = core.memoryHierarchy->access_cache(request);
+            hit = core.memoryHierarchy->is_icache_hit(request);
+            if (!hit) {
+            	hit = core.memoryHierarchy->is_ibuffer_hit(request);
+            	if (hit) {
+            		request->set_coreSignal(&core.ibuffer_signal);
+            	}
+            }
+            core.memoryHierarchy->access_cache(request);
 
             hit |= config.perfect_cache;
             if unlikely (!hit) {
@@ -689,6 +696,8 @@ bool ThreadContext::fetch() {
 
         Waddr predrip = 0;
         bool redirectrip = false;
+
+
         if unlikely (transop.already_predicted && isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
 
         	//

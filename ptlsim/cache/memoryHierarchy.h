@@ -183,6 +183,9 @@ namespace Memory {
       // interface to memory hierarchy
       bool access_cache(MemoryRequest *request);
 
+      bool is_icache_hit(MemoryRequest *request);
+      bool is_ibuffer_hit(MemoryRequest *request);
+
       // New Core wakeup function that uses Signal of MemoryRequest
       // if Signal is not setup, it uses old wrapper functions
       void core_wakeup(MemoryRequest *request) {
