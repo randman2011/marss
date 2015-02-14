@@ -196,21 +196,20 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	if likely (interconnect == NULL) {
 		// From CPU
 		if unlikely (request->is_instruction()) {
-			//if likely (!wrong_path) {
+			if likely (!request->is_bufReq()) {
 				bool bufferHit = is_icache_buffer_hit(request);
 				if(bufferHit)
 					return 0;
 
 				fastPathLat = int_L1_i_->access_fast_path(this, request);
 				N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
-			/*} else {
+			} else {
 				bool bufferHit = is_ibuf_buffer_hit(request);
 				if(bufferHit)
 					return 0;
 
 				fastPathLat = int_ibuf_->access_fast_path(this, request);
-				N_STAT_UPDATE(stats.ibuf_latency, [fastPathLat]++, kernel_req);
-			}*/
+			}
 		} else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
             N_STAT_UPDATE(stats.dcache_latency, [fastPathLat]++, kernel_req);

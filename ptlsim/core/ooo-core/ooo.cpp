@@ -151,6 +151,7 @@ void ThreadContext::reset() {
     waiting_for_icache_fill_physaddr = 0;
     fetch_uuid = 0;
     current_icache_block = 0;
+    current_ibuffer_block = 0;
     loads_in_flight = 0;
     stores_in_flight = 0;
     prev_interrupts_pending = false;

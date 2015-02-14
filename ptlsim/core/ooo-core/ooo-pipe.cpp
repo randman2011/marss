@@ -655,6 +655,7 @@ bool ThreadContext::fetch() {
             if (!hit) {
             	hit = core.memoryHierarchy->is_ibuffer_hit(request);
             	if (hit) {
+            		request->is_bufReq(true);
             		request->set_coreSignal(&core.ibuffer_signal);
             	}
             }
@@ -825,8 +826,20 @@ bool ThreadContext::fetch() {
 				assert(request != NULL);
 				request->init(core.get_coreid(), threadid, (predrip == transop.riptaken) ? transop.ripseq : transop.riptaken, 0, sim_cycle,
 						true, 0, 0, Memory::MEMORY_OP_READ);
+				request->is_bufReq(true);
 				request->set_coreSignal(&core.ibuffer_signal);
 				bool hit = core.memoryHierarchy->access_cache(request);
+				hit |= config.perfect_cache;
+				if unlikely (!hit) {
+					waiting_for_ibuffer_fill = 1;
+					waiting_for_ibuffer_fill_physaddr = req_icache_block;
+					break;
+				}
+				//current_icache_block = req_icache_block;
+
+				//*fetchq.alloc();
+				//current_basic_block_transop_index += (unaligned_ldst_buf.empty());
+
 
 				// Set up branches so mispredicts can be calculated correctly:
 				if unlikely (predrip != transop.riptaken) {

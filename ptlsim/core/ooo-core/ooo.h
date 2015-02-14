@@ -1017,6 +1017,7 @@ namespace OOO_CORE_MODEL {
 
         // Last block in icache we fetched into our buffer
         W64 current_icache_block;
+        W64 current_ibuffer_block;
         W64 fetch_uuid;
         int loads_in_flight;
         int stores_in_flight;
