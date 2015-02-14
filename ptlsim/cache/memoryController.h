@@ -67,6 +67,7 @@ class MemoryController : public Controller
 {
 	private:
 		Interconnect *cacheInterconnect_;
+		Interconnect *bufferInterconnect_;
 
 		bitvec<MEM_BANKS> banksUsed_;
 
@@ -106,6 +107,7 @@ class MemoryController : public Controller
 			os << "Memory Controller: ", get_name(), endl;
 			os << "\tconnected to:", endl;
 			os << "\t\tinterconnect: ", cacheInterconnect_->get_name(), endl;
+			os << "\t\tbuffer: ", bufferInterconnect_->get_name(), endl;
 		}
 
 };

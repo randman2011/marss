@@ -89,8 +89,9 @@ void MemoryController::register_interconnect(Interconnect *interconnect,
         case INTERCONN_TYPE_UPPER:
             cacheInterconnect_ = interconnect;
             break;
-/*		case INTERCONN_TYPE_IBUF:
-			bufferInterconnect_ = interconnect;*/
+		case INTERCONN_TYPE_IBUF:
+			bufferInterconnect_ = interconnect;
+			break;
         default:
             assert(0);
     }
@@ -270,8 +271,10 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 	message.hasData = true;
 
 	memdebug("Memory sending message: ", message);
-	success = cacheInterconnect_->get_controller_request_signal()->
-		emit(&message);
+	if(message.request->is_bufReq())
+		success = bufferInterconnect_->get_controller_request_signal()->emit(&message);
+	else
+		success = cacheInterconnect_->get_controller_request_signal()->emit(&message);
 	/* Free the message */
 	memoryHierarchy_->free_message(&message);
 
