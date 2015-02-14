@@ -104,8 +104,10 @@ class CPUController : public Controller
 {
 	private:
 		Interconnect *int_L1_i_;
+		Interconnect *int_ibuf_;
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
+		int ibufLineBits_;
 		int dcacheLineBits_;
 
 		Signal cacheAccess_;
@@ -121,7 +123,7 @@ class CPUController : public Controller
 		FixStateList<CPUControllerBufferEntry, \
 			CPU_CONT_ICACHE_BUF_SIZE> ibufBuffer_;
 
-		bool is_icache_buffer_hit(MemoryRequest *request) ;
+		bool is_icache_buffer_hit(MemoryRequest *request);
 
 		CPUControllerQueueEntry* find_dependency(MemoryRequest *request);
 
@@ -151,6 +153,7 @@ class CPUController : public Controller
         void register_interconnect(Interconnect *interconnect, int type);
 		void register_interconnect_L1_d(Interconnect *interconnect);
 		void register_interconnect_L1_i(Interconnect *interconnect);
+		void register_interconnect_ibuf(Interconnect *interconnect);
 		void print(ostream& os) const;
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
@@ -160,6 +163,10 @@ class CPUController : public Controller
         void set_icacheLineBits(int i) {
             icacheLineBits_ = i;
         }
+
+        void set_ibufLineBits(int i) {
+			ibufLineBits_ = i;
+		}
 
         void set_dcacheLineBits(int i) {
             dcacheLineBits_ = i;
@@ -178,6 +185,7 @@ class CPUController : public Controller
 			os << "CPU-Controller: " << get_name()<< endl;
 			os << "\tconnected to: "<< endl;
 			os << "\t\tL1-i: "<< int_L1_i_->get_name()<< endl;
+			os << "\t\tibuf: "<< int_ibuf_->get_name()<< endl;
 			os << "\t\tL1-d: "<< int_L1_d_->get_name()<< endl;
 		}
 

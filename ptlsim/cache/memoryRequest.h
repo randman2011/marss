@@ -65,6 +65,7 @@ class MemoryRequest: public selfqueuelink
 			refCounter_ = 0; // or maybe 1
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
+			isBufReq_ = false;
 			history = new stringbuf();
             coreSignal_ = NULL;
 		}
@@ -107,6 +108,15 @@ class MemoryRequest: public selfqueuelink
 
 		bool is_instruction() {
 			return !isData_;
+		}
+
+		bool is_bufReq() {
+			return isBufReq_;
+		}
+
+		bool is_bufReq(bool val) {
+			isBufReq_ = val;
+			return isBufReq_;
 		}
 
 		W64 get_physical_address() { return physicalAddress_; }
@@ -158,6 +168,7 @@ class MemoryRequest: public selfqueuelink
 			os << "ref-counter[", refCounter_, "] ";
 			os << "op-type[", memory_op_names[opType_], "] ";
 			os << "isData[", isData_, "] ";
+			os << "isBufReq[", isBufReq_, "]";
 			os << "ownerUUID[", ownerUUID_, "] ";
 			os << "ownerRIP[", (void*)ownerRIP_, "] ";
 			os << "History[ " << *history << "] ";
@@ -172,6 +183,7 @@ class MemoryRequest: public selfqueuelink
 		W8 threadId_;
 		W64 physicalAddress_;
 		bool isData_;
+		bool isBufReq_;
 		int robId_;
 		W64 cycles_;
 		W64 ownerRIP_;

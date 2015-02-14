@@ -48,10 +48,10 @@ CPUController::CPUController(W8 coreid, const char *name,
     memoryHierarchy_->add_cpu_controller(this);
 
 	int_L1_i_ = NULL;
-//	int_ibuf_ = NULL;
+	int_ibuf_ = NULL;
 	int_L1_d_ = NULL;
 	icacheLineBits_ = 0;
-//	ibufLineBits_ = 0;
+	ibufLineBits_ = 0;
 	dcacheLineBits_ = 0;
 
     SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
@@ -191,15 +191,15 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 
 				fastPathLat = int_L1_i_->access_fast_path(this, request);
 				N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
-			} /*else {
+			/*} else {
 				bool bufferHit = is_ibuf_buffer_hit(request);
 				if(bufferHit)
 					return 0;
 
 				fastPathLat = int_ibuf_->access_fast_path(this, request);
 				N_STAT_UPDATE(stats.ibuf_latency, [fastPathLat]++, kernel_req);
-			}
-		}*/ else {
+			}*/
+		} else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
             N_STAT_UPDATE(stats.dcache_latency, [fastPathLat]++, kernel_req);
 		}
@@ -386,10 +386,10 @@ bool CPUController::cache_access_cb(void *arg)
 	Interconnect *interconnect;
 	if unlikely (queueEntry->request->is_instruction())
 	{
-//		if likely (!wrong_path)
+		if likely (queueEntry->request->is_bufReq())
+			interconnect = int_ibuf_;
+		else
 			interconnect = int_L1_i_;
-//		else
-//			interconnect = int_ibuf_;
 	}
 	else
 		interconnect = int_L1_d_;
@@ -496,9 +496,9 @@ void CPUController::register_interconnect(Interconnect *interconnect,
         case INTERCONN_TYPE_I:
             int_L1_i_ = interconnect;
             break;
-/*		case INTERCONN_TYPE_IBUF:
+		case INTERCONN_TYPE_IBUF:
 			int_ibuf_ = interconnect;
-			break;*/
+			break;
         case INTERCONN_TYPE_D:
             int_L1_d_ = interconnect;
             break;
@@ -512,10 +512,10 @@ void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
 	int_L1_i_ = interconnect;
 }
 
-/*void CPUController::register_interconnect_ibuf_i(Interconnect *interconnect)
+void CPUController::register_interconnect_ibuf(Interconnect *interconnect)
 {
-	int_ibuf_i_ = interconnect;
-}*/
+	int_ibuf_ = interconnect;
+}
 
 void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {
