@@ -208,6 +208,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 					return 0;
 
 				fastPathLat = int_ibuf_->access_fast_path(this, request);
+				N_STAT_UPDATE(stats.ibuf_latency, [fastPathLat]++, kernel_req);
 			}
 		} else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
