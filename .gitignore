@@ -78,3 +78,6 @@ marss.layout
 # Disk image directory
 disk_images/
 ptlsim.log.backup
+*.img
+*.raw
+qemu/qemu-system-x86_64

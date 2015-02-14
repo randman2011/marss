@@ -51,7 +51,6 @@ CPUController::CPUController(W8 coreid, const char *name,
 	int_ibuf_ = NULL;
 	int_L1_d_ = NULL;
 	icacheLineBits_ = 0;
-	ibufLineBits_ = 0;
 	dcacheLineBits_ = 0;
 
     SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
@@ -157,7 +156,7 @@ bool CPUController::is_ibuf_buffer_hit(MemoryRequest *request)
 {
 	W64 lineAddress;
 	assert(request->is_instruction());
-	lineAddress = request->get_physical_address() >> ibufLineBits_;
+	lineAddress = request->get_physical_address() >> icacheLineBits_;
 
 	memdebug("IBuf Line Address is : ", lineAddress, endl);
 

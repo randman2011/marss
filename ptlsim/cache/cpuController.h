@@ -107,7 +107,6 @@ class CPUController : public Controller
 		Interconnect *int_ibuf_;
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
-		int ibufLineBits_;
 		int dcacheLineBits_;
 
 		Signal cacheAccess_;
@@ -167,10 +166,6 @@ class CPUController : public Controller
         void set_icacheLineBits(int i) {
             icacheLineBits_ = i;
         }
-
-        void set_ibufLineBits(int i) {
-			ibufLineBits_ = i;
-		}
 
         void set_dcacheLineBits(int i) {
             dcacheLineBits_ = i;

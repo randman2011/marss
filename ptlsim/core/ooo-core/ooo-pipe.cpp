@@ -631,10 +631,11 @@ bool ThreadContext::fetch() {
         Waddr physaddr = ctx.check_and_translate(fetchrip, 3, false, false, exception, mmio, pfec, true);
 
         W64 req_icache_block = floor(physaddr, ICACHE_FETCH_GRANULARITY);
-        if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
 
+        if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
             // test if icache is available:
             bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true/* icache */);
+
             if(!cache_available){
                 msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
                 thread_stats.fetch.stop.icache_stalled++;
@@ -652,16 +653,20 @@ bool ThreadContext::fetch() {
             request->set_coreSignal(&core.icache_signal);
 
             hit = core.memoryHierarchy->is_icache_hit(request);
+
             if (!hit) {
             	hit = core.memoryHierarchy->is_ibuffer_hit(request);
+
             	if (hit) {
             		request->is_bufReq(true);
             		request->set_coreSignal(&core.ibuffer_signal);
             	}
             }
+
             core.memoryHierarchy->access_cache(request);
 
             hit |= config.perfect_cache;
+
             if unlikely (!hit) {
                 waiting_for_icache_fill = 1;
                 waiting_for_icache_fill_physaddr = req_icache_block;
@@ -698,25 +703,28 @@ bool ThreadContext::fetch() {
         Waddr predrip = 0;
         bool redirectrip = false;
 
+		//
+		// Handle loads and stores marked as unaligned in the unaligned
+		// predictor predecode information. These uops are split into two
+		// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
+		// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
+		// from this buffer instead of the basic block until both uops
+		// are forced into the pipeline.
+		//
+		if unlikely (transop.unaligned) {
+			split_unaligned(transop, unaligned_ldst_buf);
+			assert(unaligned_ldst_buf.get(transop, synthop));
+		}
 
-        if unlikely (transop.already_predicted && isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
+		assert(transop.bbindex == current_basic_block_transop_index);
+		transop.synthop = synthop;
 
-        	//
-			// Handle loads and stores marked as unaligned in the unaligned
-			// predictor predecode information. These uops are split into two
-			// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
-			// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
-			// from this buffer instead of the basic block until both uops
-			// are forced into the pipeline.
-			//
+		current_basic_block_transop_index += (unaligned_ldst_buf.empty());
 
-			assert(transop.bbindex == current_basic_block_transop_index);
-			transop.synthop = synthop;
+		transop.rip = fetchrip;
+		transop.uuid = fetch_uuid++;
 
-			current_basic_block_transop_index += (unaligned_ldst_buf.empty());
-
-			transop.rip = fetchrip;
-			transop.uuid = fetch_uuid++;
+		if (isbranch(transop.opcode)) {
 			transop.predinfo.uuid = transop.uuid;
 			transop.predinfo.bptype =
 				(isclass(transop.opcode, OPCLASS_COND_BRANCH) << log2(BRANCH_HINT_COND)) |
@@ -741,44 +749,14 @@ bool ThreadContext::fetch() {
 				redirectrip = 0;
 			} else {
 				redirectrip = 1;
-
 			}
 
-			// Set up branches so mispredicts can be calculated correctly:
-			if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
-				if unlikely (predrip != transop.riptaken) {
-					assert(predrip == transop.ripseq);
-					transop.cond = invert_cond(transop.cond);
-					//
-					// We need to be careful here: we already looked up the synthop for this
-					// uop according to the old condition, so redo that here so we call the
-					// correct code for the swapped condition.
-					//
-					transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
-					swap(transop.riptaken, transop.ripseq);
-				}
-			}
-        } else {
+			thread_stats.branchpred.predictions++;
+		}
 
-			//
-			// Handle loads and stores marked as unaligned in the unaligned
-			// predictor predecode information. These uops are split into two
-			// parts (ld.lo, ld.hi or st.lo, st.hi) and the parts are put into
-			// a 4-entry buffer (unaligned_ldst_pair). Fetching continues
-			// from this buffer instead of the basic block until both uops
-			// are forced into the pipeline.
-			//
-			if unlikely (transop.unaligned) {
-				split_unaligned(transop, unaligned_ldst_buf);
-				assert(unaligned_ldst_buf.get(transop, synthop));
-			}
-
-			assert(transop.bbindex == current_basic_block_transop_index);
-			transop.synthop = synthop;
-
-			current_basic_block_transop_index += (unaligned_ldst_buf.empty());
-
+		if likely (!transop.already_predicted) {
 			thread_stats.fetch.user_insns+=transop.som;
+
 			if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
 				// We've hit an assist: stall the frontend until we resume or redirect
 				thread_stats.fetch.stop.microcode_assist++;
@@ -786,39 +764,6 @@ bool ThreadContext::fetch() {
 			}
 
 			thread_stats.fetch.uops++;
-
-			transop.rip = fetchrip;
-			transop.uuid = fetch_uuid++;
-
-			if (isbranch(transop.opcode)) {
-				transop.predinfo.uuid = transop.uuid;
-				transop.predinfo.bptype =
-					(isclass(transop.opcode, OPCLASS_COND_BRANCH) << log2(BRANCH_HINT_COND)) |
-					(isclass(transop.opcode, OPCLASS_INDIR_BRANCH) << log2(BRANCH_HINT_INDIRECT)) |
-					(bit(transop.extshift, log2(BRANCH_HINT_PUSH_RAS)) << log2(BRANCH_HINT_CALL)) |
-					(bit(transop.extshift, log2(BRANCH_HINT_POP_RAS)) << log2(BRANCH_HINT_RET));
-
-				// SMP/SMT: Fill in with target thread ID (if the predictor supports this):
-				transop.predinfo.ctxid = 0;
-				transop.predinfo.ripafter = fetchrip + transop.bytes;
-				predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
-
-				/*
-				 * FIXME : Branchpredictor should never give the predicted address in
-				 * different address space then fetchrip.  If its different, discard the
-				 * predicted address.
-				 */
-				if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
-					if(logable(10))
-						ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
-					predrip = transop.riptaken;
-					redirectrip = 0;
-				} else {
-					redirectrip = 1;
-				}
-
-				thread_stats.branchpred.predictions++;
-			}
 
 			if unlikely (isclass(transop.opcode, OPCLASS_COND_BRANCH)) {
 				// Fetch unpredicted path and place it in instruction buffer
@@ -830,6 +775,7 @@ bool ThreadContext::fetch() {
 				request->set_coreSignal(&core.ibuffer_signal);
 				bool hit = core.memoryHierarchy->access_cache(request);
 				hit |= config.perfect_cache;
+
 				if unlikely (!hit) {
 					waiting_for_ibuffer_fill = 1;
 					waiting_for_ibuffer_fill_physaddr = req_icache_block;
@@ -839,7 +785,6 @@ bool ThreadContext::fetch() {
 
 				//*fetchq.alloc();
 				//current_basic_block_transop_index += (unaligned_ldst_buf.empty());
-
 
 				// Set up branches so mispredicts can be calculated correctly:
 				if unlikely (predrip != transop.riptaken) {
@@ -854,6 +799,7 @@ bool ThreadContext::fetch() {
 					swap(transop.riptaken, transop.ripseq);
 				}
 			}
+
 			else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
 				transop.riptaken = predrip;
 				transop.ripseq = predrip;
@@ -861,7 +807,7 @@ bool ThreadContext::fetch() {
 
 			thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
 			transop.already_predicted = true;
-        }
+		}
 
         if likely (transop.eom) {
             fetchrip.rip += transop.bytes;
@@ -876,13 +822,13 @@ bool ThreadContext::fetch() {
                 taken_branch_count += taken;
                 fetchrip = predrip;
                 fetchrip.update(ctx);
+
                 if (taken) {
                     fetchcount++;
                     thread_stats.fetch.stop.branch_taken++;
                     break;
                 }
             }
-
         }
 
         fetchcount++;
