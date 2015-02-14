@@ -76,3 +76,4 @@ marss.layout
 
 # Disk image directory
 disk_images/
+ptlsim.log.backup
