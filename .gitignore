@@ -36,7 +36,6 @@ nosetests.xml
 
 # Marss log/stats/out files
 *.log
-*.stats
 *.yml
 *.out
 
